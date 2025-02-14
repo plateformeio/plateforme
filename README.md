@@ -1,5 +1,5 @@
 <p style="text-align: center">
-  <a href="https://docs.plateforme.io"><img src="./docs/banner.png" alt="Plateforme"></a>
+  <a href="https://docs.plateforme.io"><img src="https://raw.githubusercontent.com/plateformeio/plateforme/refs/heads/main/docs/banner.png" alt="Plateforme"></a>
 </p>
 
 # Plateforme Core - OSS (alpha release)
@@ -18,7 +18,7 @@ See the [documentation](https://docs.plateforme.io) for more details.
 
 ## Installation
 
-Install using `pip install -U plateforme` or ~~`conda install plateforme -c conda-forge`~~.
+Install using `pip install -U plateforme` or `conda install plateforme -c conda-forge`.
 
 For more details and advanced installation options, see the [installation guide](https://docs.plateforme.io/latest/start/install) from the official documentation site.
 
