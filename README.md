@@ -170,4 +170,4 @@ For guidance on setting up a development environment and how to make a contribut
 
 ## Reporting a security vulnerability
 
-See our [security policy](SECURITY.md).
+See our [security policy](https://github.com/plateformeio/plateforme/security/policy).
