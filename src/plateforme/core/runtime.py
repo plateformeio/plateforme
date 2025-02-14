@@ -14,7 +14,7 @@ import typing
 import warnings
 from collections.abc import Sequence
 from enum import IntEnum
-from threading import Lock, RLock, _RLock
+from threading import Lock, RLock
 from types import ModuleType
 from typing import Any, Callable, Dict, Literal, Self, Set, Union
 
@@ -252,7 +252,7 @@ class RegistryLock:
 
     def __init__(self) -> None:
         self.locks: dict[str | None, Lock] = {None: Lock()}
-        self.rlocks: dict[str | None, _RLock] = {None: RLock()}
+        self.rlocks: dict[str | None, RLock] = {None: RLock()}
 
     @typing.overload
     def __call__(
@@ -269,7 +269,7 @@ class RegistryLock:
         key: Literal['apps', 'namespaces', 'packages'] | None = None,
         *,
         reentrant: Literal[True],
-    ) -> _RLock:
+    ) -> RLock:
         ...
 
     def __call__(
