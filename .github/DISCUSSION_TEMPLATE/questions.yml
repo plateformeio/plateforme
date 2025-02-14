@@ -1,0 +1,103 @@
+labels: [question, pending]
+
+body:
+  - type: markdown
+    attributes:
+      value:  |
+        Thank you for contributing to Plateforme! 🚀
+
+        Please follow these instructions carefully and provide complete information for each question. Your detailed responses will help us address your issue effectively.
+
+        Time management presents a critical challenge in maintaining and improving Plateforme. A significant portion of our resources goes toward addressing questions and resolving issues on GitHub, which affects our ability to implement new features, fix bugs, and review pull requests promptly.
+
+        When you submit questions in a structured format following these guidelines, we can assist you more efficiently. Moreover, the process of organizing and documenting your question may lead you to discover the solution independently, eliminating the need to wait for a response.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Initial checks
+      description: Please confirm and check all the following options.
+      options:
+        - label: I have added a very descriptive title here.
+          required: true
+        - label: I have used the GitHub search to find a similar question and didn't find it.
+          required: true
+        - label: I have searched the Plateforme official documentation, with the integrated search.
+          required: true
+        - label: I have already searched in Google "How to X in Plateforme" and didn't find any information.
+          required: true
+        - label: I have already read and followed all the guides and concepts in the docs and didn't find an answer.
+          required: true
+        - label: I have already checked if it is not related to Plateforme but to [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy).
+          required: true
+        - label: I have already checked if it is not related to Plateforme but to [Pydantic](https://github.com/pydantic/pydantic).
+          required: true
+        - label: I have already checked if it is not related to Plateforme but to [FastAPI](https://github.com/tiangolo/fastapi).
+          required: true
+
+  - type: checkboxes
+    id: support
+    attributes:
+      label: Support the project
+      description: |
+        You can help the project by supporting it in different ways:
+        - Read open questions until I find 2 where I can help someone and add a comment to help there.
+        - I have already hit the "watch" button in this repository to receive notifications and I commit to help at least 2 people that ask questions in the future.
+        - Review one pull request by downloading the code and following [all the review process](https://docs.plateforme.io/latest/about/community/contributing).
+      options:
+        - label: I commit to help with one of those options 👆
+          required: false
+        - label: I've starred the Plateforme repository 🌟
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: |
+        Write a short description telling us what you are doing, what you expect to happen, and what is currently happening.
+        Provide as much detail as possible to make understanding and solving your problem as quick as possible. 🙏
+      placeholder: |
+        - Open the browser and call the endpoint `/`
+        - It returns a JSON with `{"Hello": "World"}`
+        - But I expected it to return `{"Hello": "Me"}`
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example code
+      description: |
+        Please add a self-contained, [minimal, reproducible, example](https://stackoverflow.com/help/minimal-reproducible-example) of the issue.
+        If it can be copied, pasted, and run directly, there's a much higher chance someone will be able to help you.
+      placeholder: |
+        from plateforme import BaseResource, route
+
+        class Astronaut(BaseResource):
+            name: str
+
+            @route.get()
+            def hello(self) -> str:
+                return f'Hello {self.name}!'
+      render: Python
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Versions
+      description: |
+        Which version of Plateforme, Python, and Operating System are you using?
+        Please run the following command and copy the output below 👇
+        ```bash
+        python -c "import plateforme; print(plateforme.framework.version_info())"
+        ```
+      render: Text
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add any additional context information or screenshots you think are useful.

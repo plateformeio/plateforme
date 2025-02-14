@@ -1,0 +1,216 @@
+[project]
+name = "plateforme"
+description = "The modern Python ASGI Framework for data-driven Applications and Services."
+dynamic = ["version"]
+authors = [
+    {name = "Rodolphe Barbanneau"},
+]
+license = {file = "LICENSE"}
+readme = "README.md"
+keywords = [
+    "plateforme",
+    "platform",
+    "api",
+    "app",
+    "application",
+    "async",
+    "asgi",
+    "framework",
+    "json",
+    "rest",
+    "web",
+    "fastapi",
+    "pydantic",
+    "sqlalchemy",
+    "uvicorn",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Framework :: Pydantic",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development",
+    "Typing :: Typed",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "aiosqlite==0.20.0",
+    "alembic==1.13.1",
+    "fastapi==0.110.0",
+    "pydantic==2.6.2",
+    "pydantic-core==2.16.3",
+    "pydantic-settings==2.2.1",
+    "python-dotenv==1.0.1",
+    "sqlalchemy==2.0.27",
+]
+
+[project.optional-dependencies]
+all = [
+    "plateforme[cli]",
+    "plateforme[lint]",
+    "plateforme[serve]",
+    "plateforme[test]",
+]
+cli = [
+    "jinja2==3.1.3",
+    "questionary==2.0.1",
+    "rich==13.8.1",
+    "typer==0.12.5",
+]
+lint = [
+    "mypy>=1.8",
+    "ruff>=0.3",
+]
+serve = [
+    "uvicorn==0.27.1",
+]
+test = [
+    "coverage[toml]>=7.4",
+    "faker>=23.2",
+    "pytest>=8.0",
+]
+
+[project.scripts]
+plateforme = "plateforme.cli:app"
+
+[project.urls]
+Homepage = "https://plateforme.io/"
+Documentation = "https://github.com/plateformeio/plateforme#readme"
+Issues = "https://github.com/plateformeio/plateforme/issues"
+Source = "https://github.com/plateformeio/plateforme"
+
+[build-system]
+requires = ["hatchling>=1.24.2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plateforme"]
+
+[tool.hatch.metadata]
+allow-direct-references = false
+
+[tool.hatch.version]
+path = "src/plateforme/framework.py"
+
+[[tool.hatch.envs.all.matrix]]
+python = ["3.11", "3.12", "3.13"]
+
+[tool.hatch.envs.default]
+installer = "uv"
+path = ".venv"
+[tool.hatch.envs.default.scripts]
+build = "python scripts/build.py {args}"
+publish = "python scripts/publish.py {args}"
+
+[tool.hatch.envs.lint]
+features = ["lint"]
+[tool.hatch.envs.lint.scripts]
+check = "python scripts/lint.py {args}"
+
+[tool.hatch.envs.test]
+features = ["cli", "serve", "test"]
+[tool.hatch.envs.test.scripts]
+check = "python scripts/test.py {args}"
+cov = "python scripts/cov.py {args}"
+cov-report = "python scripts/cov_report.py {args}"
+cov-test = "python scripts/cov_test.py {args}"
+
+[tool.hatch.envs.workspace]
+python = "3.11"
+features = ["cli", "lint", "serve", "test"]
+[tool.hatch.envs.workspace.scripts]
+install = "python scripts/install.py {args}"
+update = "python scripts/update.py {args}"
+
+[tool.codespell]
+skip = ".git"
+ignore-words-list = "plateforme"
+
+[tool.coverage.run]
+source_pkgs = ["plateforme", "tests"]
+context = "${CONTEXT}"
+branch = true
+parallel = true
+omit = []
+
+[tool.coverage.paths]
+source = ["src/plateforme", "*/plateforme/src/plateforme"]
+tests = ["tests", "*/plateforme/tests"]
+
+[tool.coverage.report]
+precision = 2
+exclude_lines = [
+    "no cov",
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == '__main__':",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+    "@overload",
+    "@typing.overload",
+    "typing.assert_never",
+    "assert_never",
+]
+
+[tool.mypy]
+python_version = "3.11"
+exclude = ["scripts", "src/plateforme/cli/templates"]
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+implicit_optional = false
+implicit_reexport = false
+strict = true
+strict_equality = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["e2e.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_incomplete_defs = false
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+
+[tool.ruff]
+line-length = 79
+target-version = "py311"
+
+[tool.ruff.format]
+quote-style = "preserve"
+
+[tool.ruff.lint]
+select = ["F401", "I"]
+unfixable = ["F401"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true

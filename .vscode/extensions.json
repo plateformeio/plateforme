@@ -1,0 +1,27 @@
+{
+	// Use extension identifier format for workspace recommendations:
+  // "${publisher}.${name}" (e.g. "vscode.csharp").
+  // For more information, visit:
+  // https://code.visualstudio.com/docs/editor/extension-marketplace#_workspace-recommended-extensions
+
+	// List of extensions which should be recommended for users of this
+  // workspace.
+	"recommendations": [
+    "charliermarsh.ruff",
+    "editorconfig.editorconfig",
+    "matangover.mypy",
+    "ms-python.debugpy",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "pkief.material-icon-theme",
+    "rodolphebarbanneau.python-docstring-hightlighter",
+    "seatonjiang.gitmoji-vscode"
+	],
+
+	// List of extensions recommended by VS Code that should not be recommended
+  // for users of this workspace.
+	"unwantedRecommendations": [
+    "ms-python.mypy-type-checker",
+    "ms-python.pylint"
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit:
+  // https://code.visualstudio.com/docs/editor/debugging#_launch-configurations
+
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python File",
+      "type": "debugpy",
+      "request": "launch",
+      "cwd": "${fileDirname}",
+      "program": "${file}",
+      "python": "${command:python.interpreterPath}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Python Module",
+      "type": "debugpy",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/${input:projectFolder}",
+      "module": "${input:projectFile}",
+      "python": "${command:python.interpreterPath}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Python Test",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "${file}"
+      ],
+      "python": "${command:python.interpreterPath}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "CLI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "plateforme",
+      "cwd": "${workspaceFolder}",
+      "args": "${input:command}",
+      "python": "${command:python.interpreterPath}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Uvicorn",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}/${input:projectFolder}",
+      "args": ["${input:projectFile}:app", "--port", "8001", "--reload", "--lifespan", "on"],
+      "python": "${command:python.interpreterPath}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ],
+  "inputs": [
+    {
+      "id": "command",
+      "type": "promptString",
+      "description": "Enter command"
+    },
+    {
+      "id": "projectFolder",
+      "type": "promptString",
+      "description": "Enter a project folder to debug"
+    },
+    {
+      "id": "projectFile",
+      "type": "promptString",
+      "description": "Enter a project file to debug"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+name: 🔒 Internal
+description: You are a privileged contributor to the Plateforme project and are allowed to create an issue here. If not, check the other options. 👇
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for contributing to Plateforme! 🚀
+
+        If you are not a privileged contributor to the Plateforme project allowed to create an issue here, please instead either:
+        - Start a conversation in [GitHub Discussions](https://github.com/plateformeio/plateforme/discussions)
+        - Report a bug using the [GitHub Bug Template](https://github.com/plateformeio/plateforme/issues/new?template=bug.yml).
+
+  - type: checkboxes
+    id: privileged
+    attributes:
+      label: Internal issue
+      description: Confirm that you are allowed to create an issue here.
+      options:
+        - label: I'm a privileged contributor to the Plateforme project and I'm allowed to create an issue here.
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example code
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context

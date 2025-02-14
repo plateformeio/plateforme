@@ -1,0 +1,98 @@
+labels: [enhancement, pending]
+
+body:
+  - type: markdown
+    attributes:
+      value:  |
+        Thank you for contributing to Plateforme! 🚀
+
+        Please follow these instructions carefully and provide complete information for each question. Your detailed responses will help us address your feature request effectively.
+
+        Time management presents a critical challenge in maintaining and improving Plateforme. A significant portion of our resources goes toward addressing questions and resolving issues on GitHub, which affects our ability to implement new features, fix bugs, and review pull requests promptly.
+
+        When you submit feature requests in a structured format following these guidelines, we can take into account your ideas more efficiently. Moreover, the process of organizing and documenting your feature requests may lead you to discover a similar idea, eliminating the need to wait for a response.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Initial checks
+      description: Please confirm and check all the following options.
+      options:
+        - label: I have added a very descriptive title here.
+          required: true
+        - label: I have used the GitHub search to find a similar idea and didn't find it.
+          required: true
+        - label: I have searched the Plateforme official documentation, with the integrated search.
+          required: true
+        - label: I have already searched in Google "X using Plateforme" and didn't find any information.
+          required: true
+        - label: I have already read and followed all the guides and concepts in the docs and didn't find a similar idea.
+          required: true
+        - label: I have already checked if it is not related to Plateforme but to [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy).
+          required: true
+        - label: I have already checked if it is not related to Plateforme but to [Pydantic](https://github.com/pydantic/pydantic).
+          required: true
+        - label: I have already checked if it is not related to Plateforme but to [FastAPI](https://github.com/tiangolo/fastapi).
+          required: true
+
+  - type: checkboxes
+    id: support
+    attributes:
+      label: Support the project
+      description: You can help the project by giving a star to the repository.
+      options:
+        - label: I've starred the Plateforme repository 🌟
+          required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: |
+        Give as much detail as possible about the feature you would like to suggest. 🙏
+
+        You might like to add:
+        - A demo of how code might look when using the feature
+        - Your use case(s) for the feature
+        - Why the feature should be added to Plateforme (as opposed to another library or just implemented in your code)
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example code
+      description: |
+        Please add a self-contained, [minimal, reproducible, example](https://stackoverflow.com/help/minimal-reproducible-example) of the issue.
+        If it can be copied, pasted, and run directly, there's a much higher chance someone will be able to help you.
+      placeholder: |
+        from plateforme import BaseResource, route
+
+        class Astronaut(BaseResource):
+            name: str
+
+            @route.get()
+            def hello(self) -> str:
+                return f'Hello {self.name}!'
+      render: Python
+
+
+  - type: checkboxes
+    id: affected-components
+    attributes:
+      label: Affected components
+      description: Which of the following parts of Plateforme does this feature affect?
+      options:
+        - label: '[Compatibility between releases](https://docs.plateforme.io/latest/about/releases)'
+        - label: '[Core features](https://docs.plateforme.io/latest/reference/core)'
+        - label: '[Schema features](https://docs.plateforme.io/latest/reference/schema)'
+        - label: '[Database features](https://docs.plateforme.io/latest/reference/database)'
+        - label: '[API features](https://docs.plateforme.io/latest/reference/api)'
+        - label: '[Types features](https://docs.plateforme.io/latest/reference/types)'
+        - label: '[Plugins](https://docs.plateforme.io) and integration with other tools'
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add any additional context information or screenshots you think are useful.

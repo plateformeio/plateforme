@@ -1,0 +1,34 @@
+[project]
+name = "{{project_slug}}"
+description = "{{project_description}}"
+dynamic = ["version"]
+{%- if project_author_name or project_author_email %}
+authors = [
+    {
+        {%- if project_author_name %}name = "{{project_author_name}}"{%- endif %}
+        {%- if project_author_name and project_author_email %}, {% endif %}
+        {%- if project_author_email %}email = "{{project_author_email}}"{% endif -%}
+    },
+]
+{%- endif %}
+license = {file = "LICENSE"}
+readme = "README.md"
+keywords = [
+    "plateforme",
+]
+requires-python = ">={{python_version}}"
+dependencies = [
+    "plateforme",
+]
+
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "{{project_name}}/__init__.py"
+
+[tool.plateforme.apps.default]
+scripts = {setup = "python server/setup.py"}
+build = ["setup"]
+start = "server.main:app --port 8001"

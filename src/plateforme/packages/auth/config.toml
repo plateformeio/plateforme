@@ -1,0 +1,8 @@
+[plateforme]
+name = "auth"
+description = "The Plateforme authentication package."
+dynamic = ["author", "licence", "version"]
+keywords = ["plateforme", "package", "auth"]
+
+[plateforme.package]
+namespace = "auth"

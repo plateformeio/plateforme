@@ -1,0 +1,93 @@
+name: 🐛 Report a bug
+description: Report a bug or unexpected behavior
+labels: [bug, pending]
+
+body:
+  - type: markdown
+    attributes:
+      value:  |
+        Thank you for contributing to Plateforme! 🚀
+
+        Please follow these instructions carefully and provide complete information for each issue. Your detailed responses will help us address your issue effectively.
+
+        Time management presents a critical challenge in maintaining and improving Plateforme. A significant portion of our resources goes toward addressing questions and resolving issues on GitHub, which affects our ability to implement new features, fix bugs, and review pull requests promptly.
+
+        When you submit issues in a structured format following these guidelines, we can assist you more efficiently.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Initial checks
+      description: Please confirm and check all the following options.
+      options:
+        - label: I have added a very descriptive title here.
+          required: true
+        - label: I have used the GitHub search to find a similar issue and didn't find it.
+          required: true
+        - label: I have checked if it is not related to Plateforme but to [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy).
+          required: false
+        - label: I have checked if it is not related to Plateforme but to [Pydantic](https://github.com/pydantic/pydantic).
+          required: false
+        - label: I have checked if it is not related to Plateforme but to [FastAPI](https://github.com/tiangolo/fastapi).
+          required: false
+
+  - type: checkboxes
+    id: support
+    attributes:
+      label: Support the project
+      description: You can help the project by giving a star to the repository.
+      options:
+        - label: I've starred the Plateforme repository 🌟
+          required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: |
+        Write a short description telling us what you are doing, what you expect to happen, and what is currently happening.
+        Provide as much detail as possible to make understanding and solving the issue as quick as possible. 🙏
+      placeholder: |
+        - Open the browser and call the endpoint `/`
+        - It returns a JSON with `{"Hello": "World"}`
+        - But I expected it to return `{"Hello": "Me"}`
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example code
+      description: |
+        Please add a self-contained, [minimal, reproducible, example](https://stackoverflow.com/help/minimal-reproducible-example) of the issue.
+        If it can be copied, pasted, and run directly, there's a much higher chance it can be quickly reproduced and fixed.
+      placeholder: |
+        from plateforme import BaseResource, route
+
+        class Astronaut(BaseResource):
+            name: str
+
+            @route.get()
+            def hello(self) -> str:
+                return f'Hello {self.name}!'
+      render: Python
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Versions
+      description: |
+        Which version of Plateforme, Python, and Operating System are you using?
+        Please run the following command and copy the output below 👇
+        ```bash
+        python -c "import plateforme; print(plateforme.framework.version_info())"
+        ```
+      render: Text
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add any additional context information or screenshots you think are useful.

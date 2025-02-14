@@ -1,0 +1,8 @@
+[plateforme]
+name = "users"
+description = "The Plateforme users package."
+dynamic = ["author", "licence", "version"]
+keywords = ["plateforme", "package", "users"]
+
+[plateforme.package]
+namespace = "users"

@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-issue-config.json
+
+blank_issues_enabled: false
+contact_links:
+  - name: 🤔 Ask a question
+    about: Ask a question or ask about a problem in GitHub Discussions.
+    url: https://github.com/plateformeio/plateforme/discussions/new?category=questions
+  - name: 💡 Feature request
+    about: Share ideas for new features - Please start with a question saying what you would like to achieve, there might be a way to do it already.
+    url: https://github.com/plateformeio/plateforme/discussions/new?category=ideas
+  - name: 🙌 Show and tell
+    about: Show off something you've made with Plateforme or to be used with Plateforme.
+    url: https://github.com/plateformeio/plateforme/discussions/new?category=show-and-tell

@@ -1,0 +1,48 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit:
+  // https://code.visualstudio.com/docs/getstarted/settings#_settingsjson
+
+  // Editor
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.mypy_cache": true
+  },
+  "search.exclude": {
+    "**/.venv": true,
+    "**/.vs": true,
+    "**/.vscode": true
+  },
+  "material-icon-theme.files.associations": {},
+  "material-icon-theme.folders.associations": {
+    "ai": "robot",
+    "migrations": "database"
+  },
+
+  // Python
+  "python.defaultInterpreterPath": "./.venv/bin/python",
+  "terminal.integrated.env.linux": {
+    "PYTHONPATH": "${workspaceFolder}/src"
+  },
+  "terminal.integrated.env.osx": {
+    "PYTHONPATH": "${workspaceFolder}/src"
+  },
+  "terminal.integrated.env.windows": {
+    "PYTHONPATH": "${workspaceFolder}/src"
+  },
+
+  // Linting
+  "[python]": {
+    "editor.formatOnSave": false,
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    }
+  },
+
+  // MyPy
+  "mypy.enabled": true,
+  "mypy.runUsingActiveInterpreter": true
+}
