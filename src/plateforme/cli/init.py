@@ -36,7 +36,7 @@ def init(
     ctx: Context,
     root: str = typer.Argument('.', help="The project root directory."),
     python_version: str = typer.Option(
-        '3.13',
+        '3.11',
         '--python',
         help="Python version to be used.",
     ),
@@ -97,7 +97,7 @@ def init(
 
         # Confirm the project creation
         if not questionary.confirm(
-            f'Create project in {str(project_dir)!r} directory?'
+            f'Create project in {project_dir.as_posix()!r} directory?'
         ).unsafe_ask():
             raise typer.Exit()
 
@@ -110,12 +110,11 @@ def init(
 
     # Render template
     template_dir = dirname / 'templates/bases' / str(project_template).lower()
-    for template_path in template_dir.glob('**/*'):
+    for template_path in template_dir.glob('**/*.jinja'):
         if not template_path.is_file():
             continue
         template_name = template_path.relative_to(template_dir)
-        if template_path.name == 'pyproject.jinja':
-            template_name = template_name.with_suffix('.toml')
+        template_name = template_name.with_name(template_name.stem)
         target_path = project_dir / render_path(template_name, **config)
         render_template(template_path, target_path, **config)
 
