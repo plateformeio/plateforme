@@ -1,7 +1,7 @@
 [project]
 name = "{{project_slug}}"
 description = "{{project_description}}"
-version = "0.1.0"
+dynamic = ["version"]
 {%- if project_author_name or project_author_email %}
 authors = [
     {
@@ -20,7 +20,17 @@ dependencies = [
     "plateforme",
 ]
 
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "{{project_name}}/__init__.py"
+
+[tool.hatch.envs.default]
+path = ".venv"
+
 [tool.plateforme.apps.default]
-scripts = {setup = "python setup.py"}
+scripts = {setup = "python server/setup.py"}
 build = ["setup"]
-start = "main:app --port 8001"
+start = "server.main:app --port 8001"
