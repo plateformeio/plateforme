@@ -1,6 +1,6 @@
 [project]
 name = "plateforme"
-description = "The modern Python ASGI Framework for data-driven Applications and Services."
+description = "The Python framework for Data Applications"
 dynamic = ["version"]
 authors = [
     {name = "Rodolphe Barbanneau"},
@@ -13,6 +13,7 @@ keywords = [
     "api",
     "app",
     "application",
+    "services",
     "async",
     "asgi",
     "framework",
@@ -104,14 +105,25 @@ Source = "https://github.com/plateformeio/plateforme"
 requires = ["hatchling>=1.24.2"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/plateforme"]
-
 [tool.hatch.metadata]
 allow-direct-references = false
 
 [tool.hatch.version]
 path = "src/plateforme/framework.py"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.git",
+    "/.github",
+    "/.vscode",
+    "/docs",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plateforme"]
+
+[tool.hatch.publish.index]
+disable = true
 
 [[tool.hatch.envs.all.matrix]]
 python = ["3.11", "3.12", "3.13"]
