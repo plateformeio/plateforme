@@ -886,13 +886,13 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
                 notation for field aliases and tilde `~` character for filter
                 criteria. For example, to filter results where the `user.name`
                 field starts with `Al`, the filter criteria can be specified as
-                `.user.name=like~Al%` in the query parameters.""",
+                `.user.name=like~Al*` in the query parameters.""",
             examples=[
-                '.user.name=like~Al%',
+                '.user.name=like~Al*',
                 '.price=gt~1000',
-                '.user.name=like~Al%&.price=gt~1000',
+                '.user.name=like~Al*&.price=gt~1000',
                 {
-                    'user': {'name': {'operator': 'like', 'value': 'Al%'}},
+                    'user': {'name': {'operator': 'like', 'value': 'Al*'}},
                     'price': {'operator': 'gt', 'value': 1000},
                 },
             ],
@@ -1168,13 +1168,13 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
                 notation for field aliases and tilde `~` character for filter
                 criteria. For example, to filter results where the `user.name`
                 field starts with `Al`, the filter criteria can be specified as
-                `.user.name=like~Al%` in the query parameters.""",
+                `.user.name=like~Al*` in the query parameters.""",
             examples=[
-                '.user.name=like~Al%',
+                '.user.name=like~Al*',
                 '.price=gt~1000',
-                '.user.name=like~Al%&.price=gt~1000',
+                '.user.name=like~Al*&.price=gt~1000',
                 {
-                    'user': {'name': {'operator': 'like', 'value': 'Al%'}},
+                    'user': {'name': {'operator': 'like', 'value': 'Al*'}},
                     'price': {'operator': 'gt', 'value': 1000},
                 },
             ],
@@ -1596,13 +1596,13 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
                 notation for field aliases and tilde `~` character for filter
                 criteria. For example, to filter results where the `user.name`
                 field starts with `Al`, the filter criteria can be specified as
-                `.user.name=like~Al%` in the query parameters.""",
+                `.user.name=like~Al*` in the query parameters.""",
             examples=[
-                '.user.name=like~Al%',
+                '.user.name=like~Al*',
                 '.price=gt~1000',
-                '.user.name=like~Al%&.price=gt~1000',
+                '.user.name=like~Al*&.price=gt~1000',
                 {
-                    'user': {'name': {'operator': 'like', 'value': 'Al%'}},
+                    'user': {'name': {'operator': 'like', 'value': 'Al*'}},
                     'price': {'operator': 'gt', 'value': 1000},
                 },
             ],

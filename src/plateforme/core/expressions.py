@@ -548,12 +548,12 @@ class Filter(FilterDict):
         ...     ],
         ... }
 
-        The expression ``{'user.name': 'like~Al%', user.groups*: 'foo'}``
+        The expression ``{'user.name': 'like~Al*', user.groups*: 'foo'}``
         will be parsed into:
         >>> {
         ...     'user': {
         ...         'name': [
-        ...             {'value': 'Al%', 'operator': 'like'},
+        ...             {'value': 'Al*', 'operator': 'like'},
         ...         ],
         ...         'groups*': [
         ...             {'value': 'foo', 'operator': 'eq'},

@@ -106,7 +106,7 @@ uvicorn main:app
 With the built-in CRUD and query engine, you can easily create, read, update, and delete resources. The following query finds all parts in rocket `#1` whose part codes contain the sequence `ra`.
 
 ```http
-GET http://localhost:8000/rockets/1/parts?.code=like~%ra% HTTP/1.1
+GET http://localhost:8000/rockets/1/parts?.code=like~*ra* HTTP/1.1
 ```
 
 ```json
