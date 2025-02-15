@@ -419,7 +419,7 @@ class Environment(Iterable[str]):
                 Defaults to ``False``.
         """
         # Check if the key is a valid environment variable name
-        check = re.match(r'^[a-zA-Z_]\w*$', key) is not None
+        check = re.match(r'^[a-zA-Z_][\w\(\)]*$', key) is not None
         # Raise an error or return
         if raise_errors and not check:
             raise KeyError(
