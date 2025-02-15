@@ -915,9 +915,8 @@ def collect_api_resources(
     Returns:
         A set containing the matched resources based on the filter criteria.
     """
-    # Helper function to filter resources
-    def predicate(obj: Any) -> bool:
-        return is_resource(obj) and not is_abstract(obj)
+    modules: set[ModuleType] = set()
+    resources: set['ResourceType'] = set()
 
     # Helper function to check if the object should be included
     def check(obj: Any) -> bool:
@@ -927,6 +926,20 @@ def collect_api_resources(
         if exclude is not None and name in exclude:
             return False
         return True
+
+    # Helper function to filter resources
+    def predicate(obj: Any) -> bool:
+        return is_resource(obj) and not is_abstract(obj) and check(obj)
+
+    # Helper function to collect resources
+    def collect(module: ModuleType) -> None:
+        if module in modules:
+            return
+        for _, member in inspect.getmembers(module):
+            if inspect.ismodule(member):
+                collect(member)
+            elif predicate(member):
+                resources.add(member)
 
     # Retrieve lookup settings
     if settings := package.settings.api_resources:
@@ -945,13 +958,9 @@ def collect_api_resources(
             pass
 
     # Collect resources
-    resources = set()
     for obj in objects:
         if inspect.ismodule(obj):
-            for _, resource in inspect.getmembers(obj, predicate):
-                if not check(resource):
-                    continue
-                resources.add(resource)
+            collect(obj)
         elif predicate(obj):
             resources.add(obj)
         else:
@@ -984,16 +993,8 @@ def collect_api_services(
     Returns:
         A set containing the matched services based on the filter criteria.
     """
-    # Helper function to filter services
-    def predicate(obj: Any) -> bool:
-        if isinstance(obj, type):
-            if obj is BaseService:
-                return False
-            return issubclass(obj, BaseService) \
-                and not issubclass(obj, BaseServiceWithSpec)
-        else:
-            return isinstance(obj, BaseService) \
-                and not isinstance(obj, BaseServiceWithSpec)
+    modules: set[ModuleType] = set()
+    services: set[BaseService] = set()
 
     # Helper function to check if the object should be included
     def check(obj: Any) -> bool:
@@ -1003,6 +1004,31 @@ def collect_api_services(
         if exclude is not None and name in exclude:
             return False
         return True
+
+    # Helper function to filter services
+    def predicate(obj: Any) -> bool:
+        if isinstance(obj, type):
+            if obj is BaseService:
+                return False
+            return issubclass(obj, BaseService) \
+                and not issubclass(obj, BaseServiceWithSpec) \
+                and check(obj)
+        else:
+            return isinstance(obj, BaseService) \
+                and not isinstance(obj, BaseServiceWithSpec) \
+                and check(obj)
+
+    # Helper function to collect services
+    def collect(module: ModuleType) -> None:
+        if module in modules:
+            return
+        for _, member in inspect.getmembers(module):
+            if inspect.ismodule(member):
+                collect(member)
+            elif predicate(member):
+                if isinstance(member, type):
+                    member = member()
+                services.add(member)
 
     # Retrieve lookup settings
     if settings := package.settings.api_services:
@@ -1021,18 +1047,12 @@ def collect_api_services(
             pass
 
     # Collect services
-    services = set()
     for obj in objects:
         if inspect.ismodule(obj):
-            for _, service in inspect.getmembers(obj, predicate):
-                if not check(service):
-                    continue
-                if isinstance(service, type):
-                    service = service()
-                services.add(service)
+            collect(obj)
         elif predicate(obj):
-            if isinstance(service, type):
-                service = service()
+            if isinstance(obj, type):
+                obj = obj()
             services.add(obj)
         else:
             raise PlateformeError(
