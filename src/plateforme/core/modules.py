@@ -19,9 +19,10 @@ import re
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any, ForwardRef
+from typing import Any, Callable, ForwardRef
 
 __all__ = (
+    'get_exported_members',
     'get_root_module_name',
     'import_module',
     'import_object',
@@ -38,6 +39,67 @@ __all__ = (
 
 ROOT_MODULE = 'main'
 """The root module name used as a fallback for top-level modules."""
+
+
+def get_exported_members(
+    module: ModuleType,
+    *,
+    predicate: Callable[[Any], bool] | None = None,
+) -> list[tuple[str, Any]]:
+    """Get the exported members of a module.
+
+    It retrieves the exported members of a module by inspecting the module's
+    members and filtering them based on the provided predicate.
+
+    If the module defines an ``__all__`` attribute, it uses it to filter the
+    exported members. Otherwise, it uses the module's source code to determine
+    the exported members, including imported members with aliases and members
+    defined in the specified module.
+
+    Args:
+        module: The module to get exported members from.
+        predicate: An optional callable to filter members.
+            Defaults to ``None``.
+
+    Returns:
+        The exported members of the module.
+    """
+    members = inspect.getmembers(module, predicate)
+
+    # Handle explicit exports
+    if hasattr(module, '__all__'):
+        return [
+            (name, value) for name, value in members
+            if name in module.__all__
+        ]
+
+    # Handle implicit exports
+    imported_aliases = set()
+    try:
+        source = inspect.getsource(module)
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            for alias in node.names:
+                if alias.asname is not None:
+                    imported_aliases.add(alias.name)
+    except (OSError, TypeError):
+        imported_aliases = set()
+
+    exported_members = []
+    for name, member in members:
+        # Skip current module
+        if member == module:
+            continue
+        # Skip private members
+        if name.startswith('_'):
+            continue
+        # Add members imported with alias or defined in the module
+        if name in imported_aliases or inspect.getmodule(member) == module:
+            exported_members.append((name, member))
+
+    return exported_members
 
 
 def get_root_module_name(*, prefix: str | None = None) -> str:

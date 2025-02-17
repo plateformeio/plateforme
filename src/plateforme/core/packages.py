@@ -43,7 +43,7 @@ from .database.orm import Registry
 from .database.schema import MetaData
 from .errors import PlateformeError
 from .managers import Manager
-from .modules import import_object, resolve_file_paths
+from .modules import get_exported_members, import_object, resolve_file_paths
 from .namespaces import NamespaceImpl
 from .patterns import to_name_case, to_path_case
 from .proxy import Proxy, ProxyConfig
@@ -935,7 +935,9 @@ def collect_api_resources(
     def collect(module: ModuleType) -> None:
         if module in modules:
             return
-        for _, member in inspect.getmembers(module):
+        modules.add(module)
+        members = get_exported_members(module)
+        for _, member in members:
             if inspect.ismodule(member):
                 collect(member)
             elif predicate(member):
@@ -1022,7 +1024,9 @@ def collect_api_services(
     def collect(module: ModuleType) -> None:
         if module in modules:
             return
-        for _, member in inspect.getmembers(module):
+        modules.add(module)
+        members = get_exported_members(module)
+        for _, member in members:
             if inspect.ismodule(member):
                 collect(member)
             elif predicate(member):
