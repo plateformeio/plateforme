@@ -47,6 +47,7 @@ from typing import (
     Callable,
     ClassVar,
     Coroutine,
+    ForwardRef,
     Generic,
     Literal,
     Required,
@@ -182,7 +183,6 @@ from .typing import (
     getmembers_static,
     is_abstract,
     is_endpoint,
-    is_forwardref,
     is_model,
     is_resource,
     isbaseclass_lenient,
@@ -4741,9 +4741,11 @@ def _create_resource_endpoint(
     def resolve_types(
         annotation: Any, *, root_schemas: tuple[str, ...] | None = None
     ) -> Any:
+        if isinstance(annotation, str):
+            annotation = ForwardRef(annotation)
         annotation = Annotation.replace(
             annotation,
-            test=is_forwardref,
+            test=lambda ann: isinstance(ann, ForwardRef),
             resolver=lambda ann: eval_type_lenient(
                 ann,
                 fallback=True,

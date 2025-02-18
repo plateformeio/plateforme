@@ -108,7 +108,6 @@ __all__ = (
     'is_endpoint',
     'is_exception',
     'is_finalvar',
-    'is_forwardref',
     'is_iterable',
     'is_model',
     'is_optional',
@@ -659,11 +658,6 @@ def eval_type_lenient(
     Returns:
         The evaluated annotation.
     """
-    if annotation is None:
-        annotation = NoneType
-    elif isinstance(annotation, str):
-        annotation = ForwardRef(annotation, is_argument=False, is_class=True)
-
     try:
         return typing._eval_type(  # type: ignore[attr-defined]
             annotation, globalns, localns
@@ -672,7 +666,7 @@ def eval_type_lenient(
         pass
 
     # Attempt to evaluate forward references using the fallback mechanism
-    if fallback and is_forwardref(annotation):
+    if fallback and isinstance(annotation, ForwardRef):
         from .modules import import_object, resolve_forwardref_fullname
 
         if fallback_module is None:
@@ -759,8 +753,7 @@ def eval_type_lenient_deep(
 
     # Evaluate string annotations for generic aliases
     if isinstance(annotation, str) and (
-        isinstance(_origin, NoneType)
-        or isinstance(_origin[None], GenericAlias)
+        _origin is None or isinstance(_origin[None], GenericAlias)
     ):
         try:
             return eval_type_lenient_deep(
@@ -894,7 +887,11 @@ def get_cls_hierarchy(cls: type[Any]) -> dict[str, type[Any]]:
 
 
 def get_cls_type_hints_lenient(
-    cls: type[Any], globalns: dict[str, Any] | None = None
+    cls: type[Any],
+    globalns: dict[str, Any] | None = None,
+    localns: Mapping[str, Any] | None = None,
+    *,
+    include_extras: bool = False,
 ) -> dict[str, Any]:
     """Return type hints for a class.
 
@@ -902,14 +899,37 @@ def get_cls_type_hints_lenient(
     if a forward reference is not resolvable. It collects annotations from the
     class MRO, including those from parent classes.
     """
-    hints = {}
-    for base in reversed(cls.__mro__):
-        ann = base.__dict__.get('__annotations__')
-        localns = dict(vars(base))
-        if ann is not None and ann is not GetSetDescriptorType:
+    if getattr(cls, '__no_type_check__', None):
+        return {}
+    if isinstance(cls, type):
+        hints = {}
+        for base in reversed(cls.__mro__):
+            if globalns is None:
+                base_module = sys.modules.get(base.__module__, None)
+                base_globals = getattr(base_module, '__dict__', {})
+            else:
+                base_globals = globalns
+            ann = base.__dict__.get('__annotations__', {})
+            if isinstance(ann, GetSetDescriptorType):
+                ann = {}
+            base_locals = dict(vars(base)) if localns is None else localns
+            if localns is None and globalns is None:
+                base_globals, base_locals = base_locals, base_globals
             for name, value in ann.items():
-                hints[name] = eval_type_lenient(value, globalns, localns)
-    return hints
+                if value is None:
+                    value = type(None)
+                if isinstance(value, str):
+                    value = ForwardRef(value, is_argument=False, is_class=True)
+                value = eval_type_lenient(value, base_globals, base_locals)
+                hints[name] = value
+        return (
+            hints if include_extras
+            else {
+                k: typing._strip_annotations(t)  # type: ignore[attr-defined]
+                for k, t in hints.items()
+            }
+        )
+    raise TypeError(f"Expected a class, got {cls!r}.")
 
 
 def get_cls_types_namespace(
@@ -1050,8 +1070,7 @@ def has_forwardref(annotation: Any, _origin: Any | None = None) -> bool:
         Whether the annotation contains a forward reference.
     """
     if isinstance(annotation, str) and (
-        isinstance(_origin, NoneType)
-        or isinstance(_origin[None], GenericAlias)
+        _origin is None or isinstance(_origin[None], GenericAlias)
     ):
         return True
     if isinstance(annotation, ForwardRef):
@@ -1148,11 +1167,6 @@ def is_finalvar(annotation: Any) -> bool:
 
     return _check_finalvar(annotation) \
         or _check_finalvar(typing.get_origin(annotation))
-
-
-def is_forwardref(annotation: Any) -> TypeIs[str | ForwardRef]:
-    """Check if the given annotation is a forward reference."""
-    return isinstance(annotation, str) or isinstance(annotation, ForwardRef)
 
 
 def is_iterable(annotation: Any) -> TypeIs[Iterable[Any]]:

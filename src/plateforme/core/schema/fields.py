@@ -96,7 +96,6 @@ from ..typing import (
     is_abstract,
     is_annotated,
     is_finalvar,
-    is_forwardref,
     is_model,
     is_optional,
     is_private,
@@ -1436,7 +1435,9 @@ class FieldInfo(
 
             def ann_test(ann: Any) -> bool:
                 assert isinstance(self.target, type)
-                if is_forwardref(ann):
+                if isinstance(ann, str):
+                    return True
+                if isinstance(ann, ForwardRef):
                     return True
                 if isinstance(ann, type) and issubclass(ann, self.target):
                     return True

@@ -26,7 +26,7 @@ import typing
 from collections.abc import Iterable
 from functools import wraps
 from types import ModuleType
-from typing import Any, Callable, Self, Unpack
+from typing import Any, Callable, ForwardRef, Self, Unpack
 
 from . import runtime
 from .api.routing import (
@@ -65,7 +65,6 @@ from .typing import (
     get_object_name,
     get_parent_frame_namespace,
     is_abstract,
-    is_forwardref,
     is_resource,
 )
 
@@ -1088,9 +1087,11 @@ def _create_package_endpoint(
     def resolve_types(
         annotation: Any, *, root_schemas: tuple[str, ...] | None = None
     ) -> Any:
+        if isinstance(annotation, str):
+            annotation = ForwardRef(annotation)
         annotation = Annotation.replace(
             annotation,
-            test=is_forwardref,
+            test=lambda ann: isinstance(ann, ForwardRef),
             resolver=lambda ann: eval_type_lenient(
                 ann,
                 fallback=True,
