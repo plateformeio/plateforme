@@ -1836,7 +1836,7 @@ def _init_base_identity_and_type(cls: 'ResourceMeta', /) -> None:
     # Helper to handle identity field auto strategy setup
     def handle_auto_strategy() -> None:
         if id_type == 'integer':
-            return id._update(annotation=int, default=Deferred, init=False)
+            return id._update(annotation=int, init=False)
         if id_type == 'uuid':
             return id._update(
                 annotation=UUID4,
@@ -1857,7 +1857,7 @@ def _init_base_identity_and_type(cls: 'ResourceMeta', /) -> None:
     # Helper to handle identity field hybrid strategy setup
     def handle_hybrid_strategy() -> None:
         if id_type == 'integer':
-            return id._update(annotation=int, default=Deferred)
+            return id._update(annotation=int)
         if id_type == 'uuid':
             return id._update(
                 annotation=UUID4,
@@ -3309,16 +3309,18 @@ class BaseResource(
 
     # Base resource fields
     id: int | UUID4 | None = Field(
-        default=None,
+        default=Deferred,
+        validate_default=False,
         title='ID',
         description='Resource ID',
         frozen=True,
     )
     type_: str = Field(
+        default=Deferred,
+        validate_default=False,
         alias='type',
         title='Type',
         description='Resource type',
-        default=Deferred,
         init=False,
         frozen=True,
         validation_alias=AliasChoices('type', 'type_'),

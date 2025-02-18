@@ -23,6 +23,9 @@ from pydantic.annotated_handlers import (
 from pydantic_core import (
     PydanticOmit,
     PydanticUseDefault,
+    SchemaError,
+    SchemaSerializer,
+    SchemaValidator,
     Some,
     ValidationError,
 )
@@ -180,6 +183,9 @@ __all__ = (
     'PlainValidatorFunctionSchema',
     'PydanticOmit',
     'PydanticUseDefault',
+    'SchemaError',
+    'SchemaSerializer',
+    'SchemaValidator',
     'SerializationInfo',
     'SerializerFunctionWrapHandler',
     'SetSchema',

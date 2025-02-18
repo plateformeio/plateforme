@@ -441,6 +441,29 @@ class DeferredType:
             cls.instance = super().__new__(cls)
         return cls.instance
 
+    def __init__(self) -> None:
+        from .schema import core as core_schema
+        from .schema.core import SchemaSerializer, SerializationInfo
+
+        cls = self.__class__
+
+        def serialize(value: Any, info: SerializationInfo) -> Any:
+            return '?' if info.mode == 'json' else value
+
+        schema = core_schema.json_or_python_schema(
+            json_schema=core_schema.no_info_after_validator_function(
+                lambda _: cls(),
+                core_schema.str_schema(pattern=r'^\?$'),
+            ),
+            python_schema=core_schema.is_instance_schema(cls),
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                serialize,
+                info_arg=True,
+            ),
+        )
+
+        setattr(cls, '__pydantic_serializer__', SchemaSerializer(schema))
+
     def __copy__(self) -> Self:
         return self
 

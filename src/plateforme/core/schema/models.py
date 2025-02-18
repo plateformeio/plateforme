@@ -1515,13 +1515,14 @@ class BaseModel(_BaseModel, Configurable[ModelConfig], metaclass=ModelMeta):
             # Handle guard
             field_guard = field.recursive_guard
 
-            # Handle deferrable
+            # Handle default and deferrable
+            field_default: Callable[[], Any]
+            field_validate_default = field.validate_default
             field_deferrable = field.is_identifying()
             field_required = field.is_required()
 
-            # Handle default
             if field_required:
-                field_default: Any = lambda: None
+                field_default = lambda: None
             elif field.default_factory is None:
                 field_default = lambda: field.default
             else:
@@ -1585,6 +1586,7 @@ class BaseModel(_BaseModel, Configurable[ModelConfig], metaclass=ModelMeta):
                         ),
                 ),
                 default_factory=default_factory,
+                validate_default=field_validate_default,
             )
 
         # Wrap field schema for resource models
