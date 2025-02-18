@@ -16,12 +16,19 @@ from enum import Enum
 from typing import Any, Callable, Coroutine, TypeVar, Unpack
 
 from fastapi.applications import FastAPI as _APIManager
+from fastapi.openapi.docs import (
+    get_redoc_html,
+    get_swagger_ui_html,
+    get_swagger_ui_oauth2_redirect_html,
+)
+from typing_extensions import override
 
+from ...framework import URL
 from ..typing import Default
 from .middleware import Middleware
 from .parameters import DependsInfo
 from .requests import Request
-from .responses import JSONResponse, Response
+from .responses import HTMLResponse, JSONResponse, Response
 from .routing import APIBaseRouterConfigDict, APIEndpoint, APIRouter, BaseRoute
 from .types import Lifespan
 from .utils import APIBaseRouteIdentifier, generate_unique_id
@@ -440,3 +447,65 @@ class APIManager(_APIManager):
             generate_unique_id_function=
                 generate_unique_id_function,  # type: ignore[arg-type]
         )
+
+    @override
+    def setup(self) -> None:
+        """Setup API manager documentation."""
+        # Setup Open API documentation schema
+        if self.openapi_url:
+            urls = (server_data.get('url') for server_data in self.servers)
+            server_urls = {url for url in urls if url}
+
+            async def openapi(req: Request) -> JSONResponse:
+                root_path = req.scope.get('root_path', '').rstrip('/')
+                if root_path not in server_urls:
+                    if root_path and self.root_path_in_servers:
+                        self.servers.insert(0, {'url': root_path})
+                        server_urls.add(root_path)
+                return JSONResponse(self.openapi())
+
+            self.add_route(self.openapi_url, openapi, include_in_schema=False)
+
+        # Setup Open API documentation page
+        if self.openapi_url and self.docs_url:
+            async def swagger_ui_html(req: Request) -> HTMLResponse:
+                root_path = req.scope.get('root_path', '').rstrip('/')
+                openapi_url = root_path + self.openapi_url
+                oauth2_redirect_url = self.swagger_ui_oauth2_redirect_url
+                if oauth2_redirect_url:
+                    oauth2_redirect_url = root_path + oauth2_redirect_url
+                return get_swagger_ui_html(
+                    openapi_url=openapi_url,
+                    title=f'{self.title} - Swagger UI',
+                    swagger_favicon_url=URL.FAVICON,
+                    oauth2_redirect_url=oauth2_redirect_url,
+                    init_oauth=self.swagger_ui_init_oauth,
+                    swagger_ui_parameters=self.swagger_ui_parameters,
+                )
+
+            self.add_route(
+                self.docs_url, swagger_ui_html, include_in_schema=False
+            )
+
+            if self.swagger_ui_oauth2_redirect_url:
+                async def swagger_ui_redirect(req: Request) -> HTMLResponse:
+                    return get_swagger_ui_oauth2_redirect_html()
+
+                self.add_route(
+                    self.swagger_ui_oauth2_redirect_url,
+                    swagger_ui_redirect,
+                    include_in_schema=False,
+                )
+
+        # Setup ReDoc documentation page
+        if self.openapi_url and self.redoc_url:
+            async def redoc_html(req: Request) -> HTMLResponse:
+                root_path = req.scope.get('root_path', '').rstrip('/')
+                openapi_url = root_path + self.openapi_url
+                return get_redoc_html(
+                    openapi_url=openapi_url,
+                    title=f'{self.title} - ReDoc',
+                    redoc_favicon_url=URL.FAVICON,
+                )
+
+            self.add_route(self.redoc_url, redoc_html, include_in_schema=False)

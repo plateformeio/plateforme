@@ -147,11 +147,6 @@ def version_patch() -> str:
 class URL(StrEnum):
     """An enumeration of URLs used within the Plateforme framework."""
 
-    # Repository
-    REPOSITORY = 'git+https://github.com/plateformeio/plateforme.git'
-    ISSUES = 'https://github.com/plateformeio/plateforme/issues'
-
-    # Documentation
-    WEB = 'https://plateforme.io/'
     DOCS = f'https://docs.plateforme.io/{version_minor()}/'
     ERRORS = f'https://docs.plateforme.io/{version_minor()}/errors/'
+    FAVICON = 'https://docs.plateforme.io/favicon.png'
