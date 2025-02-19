@@ -21,7 +21,6 @@ from typing import (
     Coroutine,
     Literal,
     Required,
-    TypeVar,
     Union,
 )
 
@@ -40,15 +39,14 @@ from .api.routing import APIRoute, BaseRoute
 from .api.types import ASGIApp, Lifespan
 from .loaders import Loader
 from .patterns import RegexPattern, parse_email
+from .schema.aliases import AliasChoices
 from .schema.decorators import model_validator
 from .schema.fields import Field
-from .schema.models import BaseModel, ModelConfig
+from .schema.models import BaseModel, Model, ModelConfig
 from .schema.types import Discriminator
 from .types.networks import AnyHttpUrl, Email, EngineMap
 from .types.secrets import SecretStr
 from .typing import DefaultPlaceholder
-
-_T = TypeVar('_T', bound=BaseModel)
 
 __all__ = (
     # Information
@@ -58,20 +56,33 @@ __all__ = (
     'LicenseInfoDict',
     # Settings
     'APIRouterSettings',
+    'APIRouterSettingsDict',
     'APISettings',
+    'APISettingsDict',
     'LoggingCustomFormatterSettings',
+    'LoggingCustomFormatterSettingsDict',
     'LoggingCustomHandlerSettings',
+    'LoggingCustomHandlerSettingsDict',
     'LoggingDefaultFormatterSettings',
+    'LoggingDefaultFormatterSettingsDict',
     'LoggingFileHandlerSettings',
+    'LoggingFileHandlerSettingsDict',
     'LoggingFormatterSettings',
+    'LoggingFormatterSettingsDict',
     'LoggingHandlerSettings',
+    'LoggingHandlerSettingsDict',
     'LoggingJsonFormatterSettings',
+    'LoggingJsonFormatterSettingsDict',
     'LoggingSettings',
     'LoggingSettingsDict',
     'LoggingSimpleFormatterSettings',
+    'LoggingSimpleFormatterSettingsDict',
     'LoggingStreamHandlerSettings',
+    'LoggingStreamHandlerSettingsDict',
     'NamespaceSettings',
+    'NamespaceSettingsDict',
     'PackageSettings',
+    'PackageSettingsDict',
     'Settings',
     'SettingsDict',
     # Utilities
@@ -115,7 +126,22 @@ def generate_title() -> str:
     return f'{title_adjective} {title_noun}'
 
 
-# MARK: Information
+# MARK: Contact Information
+
+class ContactInfoDict(TypedDict, total=False):
+    """Contact information dictionary."""
+
+    name: Required[str]
+    """The name of the contact person or organization."""
+
+    email: Email
+    """The email address of the contact person or organization. It must be
+    formatted as a valid email address. Defaults to ``None``."""
+
+    url: AnyHttpUrl
+    """A URL pointing to the contact information. It must be formatted as a
+    valid URL. Defaults to ``None``."""
+
 
 class ContactInfo(BaseModel):
     """Contact information."""
@@ -160,20 +186,23 @@ class ContactInfo(BaseModel):
         return obj
 
 
-class ContactInfoDict(TypedDict, total=False):
-    """Contact information dictionary."""
+class LicenseInfoDict(TypedDict, total=False):
+    """License information dictionary."""
 
     name: Required[str]
-    """The name of the contact person or organization."""
+    """The license name."""
 
-    email: Email
-    """The email address of the contact person or organization. It must be
-    formatted as a valid email address. Defaults to ``None``."""
+    identifier: str
+    """An SPDX license expression. The `identifier` field is mutually exclusive
+    with the `url` field. It is available within OpenAPI since version 3.1.0.
+    Defaults to ``None``."""
 
     url: AnyHttpUrl
-    """A URL pointing to the contact information. It must be formatted as a
-    valid URL. Defaults to ``None``."""
+    """A URL pointing to the license information. The `url` field is mutually
+    exclusive with the `identifier` field. Defaults to ``None``."""
 
+
+# MARK: License Information
 
 class LicenseInfo(BaseModel):
     """License information."""
@@ -222,23 +251,58 @@ class LicenseInfo(BaseModel):
         return obj
 
 
-class LicenseInfoDict(TypedDict, total=False):
-    """License information dictionary."""
+# MARK: API Router Settings
 
-    name: Required[str]
-    """The license name."""
+class APIRouterSettingsDict(TypedDict, total=False):
+    """Plateforme API router settings dictionary."""
 
-    identifier: str
-    """An SPDX license expression. The `identifier` field is mutually exclusive
-    with the `url` field. It is available within OpenAPI since version 3.1.0.
+    dependencies: Sequence[DependsInfo] | None
+    """A collection of dependencies to be applied to all the path operations in
+    the router (using `Depends`). Defaults to ``None``."""
+
+    default_response_class: type[Response]
+    """The default response class to be used for path operations.
+    Defaults to `JSONResponse`."""
+
+    responses: dict[int | str, dict[str, Any]] | None
+    """Additional responses to be shown in OpenAPI. It will be added to the
+    generated OpenAPI, visible at ``'/docs'``. Defaults to ``None``."""
+
+    callbacks: list[BaseRoute] | None
+    """OpenAPI callbacks that should apply to all path operations in the
+    router. It will be added to the generated OpenAPI, visible at ``'/docs'``.
     Defaults to ``None``."""
 
-    url: AnyHttpUrl
-    """A URL pointing to the license information. The `url` field is mutually
-    exclusive with the `identifier` field. Defaults to ``None``."""
+    routes: list[BaseRoute] | None
+    """A collection of routes to be included in the router to serve incoming
+    HTTP and WebSocket requests. This is not recommended for general use, as it
+    bypasses the traditional routing system. Defaults to ``None``."""
 
+    redirect_slashes: bool
+    """Whether to redirect requests with a trailing slash to the same path
+    without the trailing slash. Defaults to ``True``."""
 
-# MARK: API Settings
+    default: ASGIApp | None
+    """The default function handler to be used for the router. It is used to
+    handle ``'404 Not Found'`` errors. Defaults to ``None``."""
+
+    dependency_overrides_provider: Any
+    """An optional dependency overrides provider used internally by the router.
+    Defaults to ``None``."""
+
+    route_class: type[APIRoute]
+    """The request route class to be used for the router."""
+
+    lifespan: Lifespan[APIManager] | None
+    """The `Lifespan` context manager handler for events to be executed when
+    the router starts up and shuts down. It defines a collection of
+    `on_startup` and `on_shutdown` events. Defaults to ``None``."""
+
+    include_in_schema: bool
+    """Include (or not) all the path operations in the router in the generated
+    OpenAPI schema. This affects the generated OpenAPI, visible at ``'/docs'``.
+    Defaults to ``True``."""
+
 
 class APIRouterSettings(BaseModel):
     """Plateforme API router settings."""
@@ -266,7 +330,7 @@ class APIRouterSettings(BaseModel):
         default=None,
         title='Responses',
         description="""Additional responses to be shown in OpenAPI. It will be
-            added to the generated OpenAPI, visible at `/docs`.""",
+            added to the generated OpenAPI, visible at `'/docs'`.""",
     )
 
     callbacks: list[Annotated[BaseRoute, Loader()]] | None = Field(
@@ -274,7 +338,7 @@ class APIRouterSettings(BaseModel):
         title='Callbacks',
         description="""OpenAPI callbacks that should apply to all path
             operations in the router. It will be added to the generated
-            OpenAPI, visible at `/docs`.""",
+            OpenAPI, visible at `'/docs'`.""",
     )
 
     routes: list[Annotated[BaseRoute, Loader()]] | None = Field(
@@ -325,8 +389,155 @@ class APIRouterSettings(BaseModel):
         title='Include in schema',
         description="""Include (or not) all the path operations in the router
             in the generated OpenAPI schema. This affects the generated
-            OpenAPI, visible at `/docs`.""",
+            OpenAPI, visible at `'/docs'`.""",
     )
+
+
+# MARK: API Settings
+
+class APISettingsDict(TypedDict, total=False):
+    """Plateforme API settings dictionary."""
+
+    openapi_url: str | None
+    """The URL where the OpenAPI schema will be served from. If you set it to
+    ``None``, no OpenAPI schema will be served publicly, and the default
+    automatic endpoints ``'/docs'`` and ``'/redoc'`` will also be disabled.
+    Defaults to ``'/openapi.json'``."""
+
+    openapi_tags: list[dict[str, Any]] | None
+    """A list of tags used by OpenAPI, these are the same `tags` you can set in
+    the path operations. The order of the tags can be used to specify the order
+    shown in tools like Swagger UI, used in the automatic path ``'/docs'``.
+    It's not required to specify all the tags used. The tags that are not
+    declared MAY be organized randomly or based on the tool's logic. Each tag
+    name in the list MUST be unique.
+    The value of each item is a dict containing:
+    - `name`: The name of the tag.
+    - `description`: A short description of the tag. CommonMark syntax MAY be
+        used for rich text representation.
+    - `externalDocs`: Additional external documentation for this tag. If
+        provided, it would contain a dict with:
+        - `description`: A short description of the target documentation.
+            CommonMark syntax MAY be used for rich text representation.
+        - `url`: The URL for the target documentation. Value MUST be in the form
+            of a URL.
+    Defaults to ``None``."""
+
+    servers: list[dict[str, Any]] | None
+    """A list of dicts with connectivity information to a target server. You
+    would use it, for example, if your application is served from different
+    domains and you want to use the same Swagger UI in the browser to interact
+    with each of them (instead of having multiple browser tabs open). Or if you
+    want to leave fixed the possible URLs. If the servers list is not provided,
+    or is an empty list, the default value would be a dict with a `url` value
+    of ``'/'``. Each item in the list is a dict containing:
+    - `url`: A URL to the target host. This URL supports Server Variables and
+        MAY be relative, to indicate that the host location is relative to the
+        location where the OpenAPI document is being served. Variable
+        substitutions will be made when a variable is named inside brackets
+        ``{}``.
+    - `description`: An optional string describing the host designated by the
+        URL. CommonMark syntax MAY be used for rich text representation.
+    - `variables`: A dict between a variable name and its value. The value is
+        used for substitution in the server's URL template.
+    Defaults to ``None``."""
+
+    dependencies: Sequence[DependsInfo] | None
+    """A collection of dependencies to be applied to all the path operations in
+    the router (using `Depends`). Defaults to ``None``."""
+
+    default_response_class: type[Response]
+    """The default response class to be used for path operations.
+    Defaults to `JSONResponse`."""
+
+    redirect_slashes: bool
+    """Whether to redirect requests with a trailing slash to the same path
+    without the trailing slash. Defaults to ``True``."""
+
+    docs_url: str | None
+    """The path to the automatic interactive API documentation. It is handled
+    in the browser by Swagger UI. The default URL is ``'/docs'``. You can
+    disable it by setting it to ``None``. If ``openapi_url`` is set to
+    ``None``, this will be automatically disabled. Defaults to ``'/docs'``."""
+
+    redoc_url: str | None
+    """The path to the alternative automatic interactive API documentation
+    provided by ReDoc. The default URL is ``'/redoc'``. You can disable it by
+    setting it to ``None``. If ``openapi_url`` is set to ``None``, this will be
+    automatically disabled. Defaults to ``'/redoc'``."""
+
+    swagger_ui_oauth2_redirect_url: str | None
+    """The OAuth2 redirect endpoint for the Swagger UI. By default it is
+    ``/docs/oauth2-redirect``. This is only used if you use OAuth2
+    (with the "Authorize" button) with Swagger UI.
+    Defaults to ``'/docs/oauth2-redirect'``."""
+
+    swagger_ui_init_oauth: dict[str, Any] | None
+    """OAuth2 configuration for the Swagger UI, by default shown at
+    ``'/docs'``. Defaults to ``None``."""
+
+    middleware: Sequence[Middleware] | None
+    """A list of middleware to be added when creating the application. You can
+    do this with `api.add_middleware()` instead. Defaults to ``None``."""
+
+    exception_handlers: dict[
+        int | type[Exception],
+        Callable[[Request, Any], Coroutine[Any, Any, Response]]
+    ] | None
+    """A dictionary with handlers for exceptions. You can use the decorator
+    `@api.exception_handler()` instead. Defaults to ``None``."""
+
+
+    lifespan: Lifespan[APIManager] | None
+    """The `Lifespan` context manager handler for events to be executed when
+    the router starts up and shuts down. It defines a collection of
+    `on_startup` and `on_shutdown` events. Defaults to ``None``."""
+
+    openapi_prefix: str
+    """A URL prefix for the OpenAPI URL. Defaults to ``''``."""
+
+    root_path: str
+    """A path prefix handled by a proxy that is not seen by the application but
+    is seen by external clients, which affects things like Swagger UI.
+    Defaults to ``''``."""
+
+    root_path_in_servers: bool
+    """To disable automatically generating the URLs in the `servers` field in
+    the autogenerated OpenAPI using the `root_path`. Defaults to ``True``."""
+
+    responses: dict[int | str, dict[str, Any]] | None
+    """Additional responses to be shown in OpenAPI. It will be added to the
+    generated OpenAPI, visible at ``'/docs'``. Defaults to ``None``."""
+
+    callbacks: list[BaseRoute] | None
+    """OpenAPI callbacks that should apply to all path operations. It will be
+    added to the generated OpenAPI, visible at ``'/docs'``.
+    Defaults to ``None``."""
+
+    routes: list[BaseRoute] | None
+    """A collection of routes to be included in the router to serve incoming
+    HTTP and WebSocket requests. This is not recommended for general use, as it
+    bypasses the traditional routing system. Defaults to ``None``."""
+
+    webhooks: APIRoute | None
+    """Add OpenAPI webhooks. This is similar to `callbacks` but it doesn't
+    require a response. Defaults to ``None``."""
+
+    include_in_schema: bool
+    """Whether the API should be included in the OpenAPI schema.
+    Defaults to ``True``."""
+
+    swagger_ui_parameters: dict[str, Any] | None
+    """Additional parameters to pass to the Swagger UI.
+    Defaults to ``None``."""
+
+    separate_input_output_schemas: bool
+    """Whether input and output schemas should be separate.
+    Defaults to ``True``."""
+
+    extra: dict[str, Any]
+    """Additional parameters to pass to the application.
+    Defaults to an empty dictionary."""
 
 
 class APISettings(BaseModel):
@@ -342,8 +553,8 @@ class APISettings(BaseModel):
         title='OpenAPI URL',
         description="""The URL where the OpenAPI schema will be served from. If
             you set it to `None`, no OpenAPI schema will be served publicly,
-            and the default automatic endpoints `/docs` and `/redoc` will also
-            be disabled.""",
+            and the default automatic endpoints `'/docs'` and `'/redoc'` will
+            also be disabled.""",
     )
 
     openapi_tags: list[dict[str, Any]] | None = Field(
@@ -352,7 +563,7 @@ class APISettings(BaseModel):
         description="""A list of tags used by OpenAPI, these are the same
             `tags` you can set in the path operations. The order of the tags
             can be used to specify the order shown in tools like Swagger UI,
-            used in the automatic path `/docs`. It's not required to specify
+            used in the automatic path `'/docs'`. It's not required to specify
             all the tags used. The tags that are not declared MAY be organized
             randomly or based on the tool's logic. Each tag name in the list
             MUST be unique. The value of each item is a dict containing:
@@ -384,7 +595,7 @@ class APISettings(BaseModel):
                 Variables and MAY be relative, to indicate that the host
                 location is relative to the location where the OpenAPI document
                 is being served. Variable substitutions will be made when a
-                variable is named inside brackets `{}`
+                variable is named inside brackets `{}`.
             - `description`: An optional string describing the host designated
                 by the URL. CommonMark syntax MAY be used for rich text
                 representation.
@@ -418,7 +629,7 @@ class APISettings(BaseModel):
         title='Docs URL',
         description="""The path to the automatic interactive API documentation.
             It is handled in the browser by Swagger UI. The default URL is
-            `/docs`. You can disable it by setting it to `None`. If
+            `'/docs'`. You can disable it by setting it to `None`. If
             `openapi_url` is set to `None`, this will be automatically
             disabled.""",
     )
@@ -427,7 +638,7 @@ class APISettings(BaseModel):
         default='/redoc',
         title='ReDoc URL',
         description="""The path to the alternative automatic interactive API
-            documentation provided by ReDoc. The default URL is `/redoc`. You
+            documentation provided by ReDoc. The default URL is `'/redoc'`. You
             can disable it by setting it to `None`. If `openapi_url` is set to
             `None`, this will be automatically disabled.""",
     )
@@ -436,15 +647,15 @@ class APISettings(BaseModel):
         default='/docs/oauth2-redirect',
         title='Swagger UI OAuth2 redirect URL',
         description="""The OAuth2 redirect endpoint for the Swagger UI. By
-            default it is `/docs/oauth2-redirect`. This is only used if you use
-            OAuth2 (with the "Authorize" button) with Swagger UI.""",
+            default it is `'/docs/oauth2-redirect'`. This is only used if you
+            use OAuth2 (with the "Authorize" button) with Swagger UI.""",
     )
 
     swagger_ui_init_oauth: dict[str, Any] | None = Field(
         default=None,
         title='Swagger UI init OAuth',
         description="""OAuth2 configuration for the Swagger UI, by default
-            shown at `/docs`.""",
+            shown at `'/docs'`.""",
     )
 
     middleware: Sequence[Annotated[Middleware, Loader()]] | None = Field(
@@ -502,7 +713,7 @@ class APISettings(BaseModel):
         default=None,
         title='Responses',
         description="""Additional responses to be shown in OpenAPI. It will be
-            added to the generated OpenAPI, visible at `/docs`.""",
+            added to the generated OpenAPI, visible at `'/docs'`.""",
     )
 
     callbacks: list[Annotated[BaseRoute, Loader()]] | None = Field(
@@ -510,7 +721,7 @@ class APISettings(BaseModel):
         title='Callbacks',
         description="""OpenAPI callbacks that should apply to all path
             operations. It will be added to the generated OpenAPI, visible at
-            `/docs`.""",
+            `'/docs'`.""",
     )
 
     routes: list[Annotated[BaseRoute, Loader()]] | None = Field(
@@ -554,10 +765,45 @@ class APISettings(BaseModel):
     )
 
 
-# MARK: Logging Settings
+# MARK: Logging Formatter Settings
+
+LoggingFormatterSettingsDict = Union[
+    'LoggingCustomFormatterSettingsDict',
+    'LoggingDefaultFormatterSettingsDict',
+    'LoggingJsonFormatterSettingsDict',
+    'LoggingSimpleFormatterSettingsDict',
+]
+"""Plateforme logging formatter settings dictionary."""
+
+
+LoggingFormatterSettings = Union[
+    'LoggingCustomFormatterSettings',
+    'LoggingDefaultFormatterSettings',
+    'LoggingJsonFormatterSettings',
+    'LoggingSimpleFormatterSettings',
+]
+"""Plateforme logging formatter settings."""
+
+
+# MARK:> Custom Formatter
+
+class LoggingCustomFormatterSettingsDict(TypedDict, total=False):
+    """Plateforme logging custom formatter settings dictionary."""
+
+    type: Required[Literal['custom']]
+    """The type of the formatter set as ``'custom'`` and used to discriminate
+    between different formatter types."""
+
+    cls: Required[str]
+    """The fully qualified name of the custom formatter class to use. This
+    should be a subclass of `logging.Formatter`."""
+
+    extra: dict[str, Any] | None
+    """Extra parameters to pass to the custom formatter."""
+
 
 class LoggingCustomFormatterSettings(BaseModel):
-    """Logging custom formatter settings."""
+    """Plateforme logging custom formatter settings."""
 
     __config__ = ModelConfig(
         title='Logging custom formatter settings',
@@ -570,23 +816,51 @@ class LoggingCustomFormatterSettings(BaseModel):
         default='custom',
         alias='type',
         title='Formatter type',
-        init=False,
         description="""The type of the formatter set as `'custom'` and used to
             discriminate between different formatter types.""",
+        init=False,
     )
 
     cls: str = Field(
         ...,
         alias='class',
+        validation_alias=AliasChoices('class', 'cls'),
         title='Formatter class',
         description="""The fully qualified name of the custom formatter class
             to use. This should be a subclass of `logging.Formatter`.""",
         examples=['my_module.MyCustomFormatter'],
     )
 
+    @model_validator(mode='before')
+    @classmethod
+    def __validator__(cls, obj: Any) -> Any:
+        if isinstance(obj, dict):
+            extra = obj.pop('extra', {})
+            obj.update(extra)
+        return obj
+
+
+# MARK:> Default Formatter
+
+class LoggingDefaultFormatterSettingsDict(TypedDict, total=False):
+    """Plateforme logging default formatter settings dictionary."""
+
+    type: Required[Literal['default']]
+    """The type of the formatter set as ``'default'`` and used to discriminate
+    between different formatter types."""
+
+    asctime: bool
+    """Human-readable time when the `LogRecord` was created. By default this is
+    of the form ``'2003-07-08T16:49:45+0100'``. Format: ``'%(asctime)s'``.
+    Defaults to ``False``."""
+
+    use_colors: bool
+    """Whether to use colors in the log output. This is only available in the
+    default formatter. Defaults to ``False``."""
+
 
 class LoggingDefaultFormatterSettings(BaseModel):
-    """Logging default formatter settings."""
+    """Plateforme logging default formatter settings."""
 
     __config__ = ModelConfig(
         title='Logging default formatter settings',
@@ -598,9 +872,9 @@ class LoggingDefaultFormatterSettings(BaseModel):
         default='default',
         alias='type',
         title='Formatter type',
-        init=False,
         description="""The type of the formatter set as `'default'` and used to
             discriminate between different formatter types.""",
+        init=False,
     )
 
     asctime: bool = Field(
@@ -619,8 +893,112 @@ class LoggingDefaultFormatterSettings(BaseModel):
     )
 
 
+# MARK:> JSON Formatter
+
+class LoggingJsonFormatterSettingsDict(TypedDict, total=False):
+    """Plateforme logging JSON formatter settings dictionary."""
+
+    type: Required[Literal['json']]
+    """The type of the formatter set as ``'json'`` and used to discriminate
+    between different formatter types."""
+
+    levelname: bool
+    """Text logging level for the message (``'DEBUG'``, ``'INFO'``,
+    ``'WARNING'``, ``'ERROR'``, ``'CRITICAL'``). Defaults to ``True``."""
+
+    levelno: bool
+    """Numeric logging level for the message (``DEBUG``, ``INFO``, ``WARNING``,
+    ``ERROR``, ``CRITICAL``). Defaults to ``False``."""
+
+    message: bool
+    """The logged message, computed as ``msg % args``. This is set when
+    ``Formatter.format()`` is invoked. Defaults to ``True``."""
+
+    timestamp: bool
+    """Human-readable timestamp when the `LogRecord` was created with timezone
+    information. This is of the form ``'2024-01-19T03:04:40.131729+00:00'``
+    (the numbers after the dot are millisecond portion of the time, and the
+    timezone is UTC). Defaults to ``True``."""
+
+    asctime: bool
+    """Human-readable time when the `LogRecord` was created. By default this is
+    of the form ``'2003-07-08T16:49:45+0100'``. Defaults to ``False``."""
+
+    created: bool
+    """Time when the `LogRecord` was created
+    (as returned by `time.time_ns() / 1e9`). Defaults to ``False``."""
+
+    msecs: bool
+    """Millisecond portion of the time when the `LogRecord` was created.
+    Defaults to ``False``."""
+
+    name: bool
+    """Name of the logger used to log the call. Defaults to ``True``."""
+
+    module: bool
+    """Module (name portion of `filename`). Defaults to ``True``."""
+
+    funtion: bool
+    """Name of function containing the logging call. Defaults to ``True``."""
+
+    lineno: bool
+    """Source line number where the logging call was issued (if available).
+    Defaults to ``True``."""
+
+    args: bool
+    """The tuple of arguments merged into `msg` to produce `message`, or a dict
+    whose values are used for the merge (when there is only one argument, and
+    it is a dictionary). Defaults to ``False``."""
+
+    msg: bool
+    """The format string passed in the original logging call. Merged with
+    `args` to produce `message`, or an arbitrary object.
+    Defaults to ``False``."""
+
+    pathname: bool
+    """Full pathname of the source file where the logging call was issued
+    (if available). Defaults to ``False``."""
+
+    filename: bool
+    """Filename portion of `pathname`. Defaults to ``False``."""
+
+    process: bool
+    """Process ID (if available). Defaults to ``False``."""
+
+    process_name: bool
+    """Process name (if available). Defaults to ``False``."""
+
+    relative_created: bool
+    """Time in milliseconds when the `LogRecord` was created, relative to the
+    time the logging module was loaded. Defaults to ``False``."""
+
+    exc_info: bool
+    """Exception tuple (like `sys.exc_info`) or, if no exception has occurred,
+    `None`. Defaults to ``False``."""
+
+    stack_info: bool
+    """Stack frame information (where available) from the bottom of the stack
+    in the current thread, up to and including the stack frame of the logging
+    call. Defaults to ``False``."""
+
+    task_name: bool
+    """A `asyncio.Task` name (if available). Defaults to ``False``."""
+
+    thread: bool
+    """Thread ID (if available). Defaults to ``False``."""
+
+    thread_name: bool
+    """Thread name (if available). Defaults to ``False``."""
+
+    extra: bool
+    """Wheiher to include all the user-defined extra fields in the log record.
+    If ``True``, the extra attributes of the log record will be serialized as a
+    dictionary and included in the log record. Otherwise, the extra attributes
+    will be ignored. Defaults to ``True``."""
+
+
 class LoggingJsonFormatterSettings(BaseModel):
-    """Logging JSON formatter settings."""
+    """Plateforme logging JSON formatter settings."""
 
     __config__ = ModelConfig(
         title='Logging JSON formatter settings',
@@ -632,9 +1010,9 @@ class LoggingJsonFormatterSettings(BaseModel):
         default='json',
         alias='type',
         title='Formatter type',
-        init=False,
         description="""The type of the formatter set as `'json'` and used to
             discriminate between different formatter types.""",
+        init=False,
     )
 
     levelname: bool = Field(
@@ -795,7 +1173,7 @@ class LoggingJsonFormatterSettings(BaseModel):
     task_name: bool = Field(
         default=False,
         title='Task name',
-        description="""`asyncio.Task` name (if available).
+        description="""A `asyncio.Task` name (if available).
             Format: `'%(taskName)s'`""",
     )
 
@@ -823,8 +1201,48 @@ class LoggingJsonFormatterSettings(BaseModel):
     )
 
 
+# MARK:> Simple Formatter
+
+class LoggingSimpleFormatterSettingsDict(TypedDict, total=False):
+    """Plateforme logging simple formatter settings dictionary."""
+
+    type: Required[Literal['simple']]
+    """The type of the formatter set as ``'simple'`` and used to discriminate
+    between different formatter types."""
+
+    format: str
+    """A format string in the given style for the logged output as a whole. The
+    possible mapping keys are drawn from the `LogRecord` object's attributes.
+    If not specified, ``'%(message)s'`` is used, which is just the logged
+    message. Defaults to
+    ``'[%(asctime)s] %(levelname)-8s: %(module)s:%(lineno)d - %(message)s'``.
+    """
+
+    datefmt: str
+    """A format string in the given style for the date/time portion of the
+    logged output. If not specified, the default described in `formatTime()` is
+    used. Defaults to ``'%Y-%m-%dT%H:%M:%S%z'``."""
+
+    style: Literal['%', '{', '$']
+    """Can be one of ``'%'``, ``'{'``, or ``'$'`` and determines how the format
+    string will be merged with its data: using one of printf-style String
+    Formatting (%), `str.format()` ({) or `string.Template` ($). This only
+    applies to fmt and datefmt (e.g. ``'%(message)s'`` versus ``'{message}'``),
+    not to the actual log messages passed to the logging methods. However,
+    there are other ways to use ``'{'``- and ``'$'``-formatting for log
+    messages. Defaults to ``'%'``."""
+
+    raise_errors: bool
+    """If ``True``, incorrect or mismatched `format` and `style` will raise a
+    ValueError. Defaults to ``True``."""
+
+    defaults: dict[str, Any] | None
+    """A dictionary with default values to use in custom fields.
+    Defaults to ``None``."""
+
+
 class LoggingSimpleFormatterSettings(BaseModel):
-    """Logging simple formatter settings."""
+    """Plateforme logging simple formatter settings."""
 
     __config__ = ModelConfig(
         title='Logging simple formatter settings',
@@ -836,9 +1254,9 @@ class LoggingSimpleFormatterSettings(BaseModel):
         default='simple',
         alias='type',
         title='Formatter type',
-        init=False,
         description="""The type of the formatter set as `'simple'` and used to
             discriminate between different formatter types.""",
+        init=False,
     )
 
     format: str = Field(
@@ -873,7 +1291,7 @@ class LoggingSimpleFormatterSettings(BaseModel):
             `string.Template` ($). This only applies to fmt and datefmt (e.g.
             `'%(message)s'` versus `'{message}'`), not to the actual log
             messages passed to the logging methods. However, there are other
-            ways to use `{`- and `$`-formatting for log messages.""",
+            ways to use `'{'`- and `'$'`-formatting for log messages.""",
     )
 
     raise_errors: bool  = Field(
@@ -892,17 +1310,61 @@ class LoggingSimpleFormatterSettings(BaseModel):
     )
 
 
-LoggingFormatterSettings = Union[
-    LoggingCustomFormatterSettings,
-    LoggingDefaultFormatterSettings,
-    LoggingJsonFormatterSettings,
-    LoggingSimpleFormatterSettings,
+# MARK: Logging Handler Settings
+
+LoggingHandlerSettingsDict = Union[
+    'LoggingCustomHandlerSettingsDict',
+    'LoggingFileHandlerSettingsDict',
+    'LoggingStreamHandlerSettingsDict',
 ]
-"""Logging formatter settings."""
+"""Plateforme logging handler settings dictionary."""
+
+
+LoggingHandlerSettings = Union[
+    'LoggingCustomHandlerSettings',
+    'LoggingFileHandlerSettings',
+    'LoggingStreamHandlerSettings',
+]
+"""Plateforme logging handler settings."""
+
+
+# MARK:> Custom Handler
+
+class LoggingCustomHandlerSettingsDict(TypedDict, total=False):
+    """Plateforme logging custom handler settings dictionary."""
+
+    type: Required[Literal['custom']]
+    """The type of the handler set as ``'custom'`` and used to discriminate
+    between different handler types."""
+
+    cls: Required[str]
+    """The fully qualified name of the custom handler class to use. This should
+    be a subclass of `logging.Handler`."""
+
+    level: Literal[
+        'DEBUG',
+        'INFO',
+        'WARNING',
+        'ERROR',
+        'CRITICAL',
+    ] | None
+    """The logging level for the custom handler. Defaults to ``None``."""
+
+    filters: list[str] | None
+    """A list of logging filters to use for the custom handler. Each filter
+    should be a fully qualified name of the filter class.
+    Defaults to ``None``."""
+
+    formatter: str
+    """The formatter name to use for the custom handler.
+    Defaults to ``'default'``."""
+
+    extra: dict[str, Any] | None
+    """Extra parameters to pass to the custom handler."""
 
 
 class LoggingCustomHandlerSettings(BaseModel):
-    """Logging custom handler settings."""
+    """Plateforme logging custom handler settings."""
 
     __config__ = ModelConfig(
         title='Logging custom handler settings',
@@ -915,14 +1377,15 @@ class LoggingCustomHandlerSettings(BaseModel):
         default='custom',
         alias='type',
         title='Handler type',
-        init=False,
         description="""The type of the handler set as `'custom'` and used to
             discriminate between different handler types.""",
+        init=False,
     )
 
     cls: str = Field(
         ...,
         alias='class',
+        validation_alias=AliasChoices('class', 'cls'),
         title='Handler class',
         description="""The fully qualified name of the custom handler class
             to use. This should be a subclass of `logging.Handler`.""",
@@ -958,9 +1421,58 @@ class LoggingCustomHandlerSettings(BaseModel):
         examples=['default', 'color', 'json', 'my_custom'],
     )
 
+    @model_validator(mode='before')
+    @classmethod
+    def __validator__(cls, obj: Any) -> Any:
+        if isinstance(obj, dict):
+            extra = obj.pop('extra', {})
+            obj.update(extra)
+        return obj
+
+
+# MARK:> File Handler
+
+class LoggingFileHandlerSettingsDict(TypedDict, total=False):
+    """Plateforme logging file handler settings dictionary."""
+
+    type: Required[Literal['file']]
+    """The type of the handler set as ``'file'`` and used to discriminate between
+    different handler types."""
+
+    level: Literal[
+        'DEBUG',
+        'INFO',
+        'WARNING',
+        'ERROR',
+        'CRITICAL',
+    ] | None
+    """The logging level for the file handler. Defaults to ``None``."""
+
+    filters: list[str] | None
+    """A list of logging filters to use for the file handler. Each filter
+    should be a fully qualified name of the filter class.
+    Defaults to ``None``."""
+
+    formatter: str
+    """The formatter name to use for the file handler.
+    Defaults to ``'json'``."""
+
+    filename: str | None
+    """The filename to use for the handler. If not provided, the handler will
+    use the default filename ``'plateforme.log'``, or ``'plateforme.jsonl'`` if
+    the JSON formatter is used. Defaults to ``None``."""
+
+    max_bytes: int
+    """The maximum number of bytes to store in the log file before rotating the
+    file. Defaults to ``10485760``."""
+
+    backup_count: int
+    """The number of backup files to keep when rotating the log file.
+    Defaults to ``5``."""
+
 
 class LoggingFileHandlerSettings(BaseModel):
-    """Logging file handler settings."""
+    """Plateforme logging file handler settings."""
 
     __config__ = ModelConfig(
         title='Logging file hHandler settings',
@@ -972,9 +1484,9 @@ class LoggingFileHandlerSettings(BaseModel):
         default='file',
         alias='type',
         title='Handler type',
-        init=False,
         description="""The type of the handler set as `'file'` and used to
             discriminate between different handler types.""",
+        init=False,
     )
 
     level: Literal[
@@ -1010,9 +1522,9 @@ class LoggingFileHandlerSettings(BaseModel):
         default=None,
         title='Filename',
         description="""The filename to use for the handler. If not provided,
-            the handler will use the default filename `'logs/plateforme.log'`,
-            or `'logs/plateforme.jsonl'` if the JSON formatter is used.""",
-        examples=['logs/plateforme.log', 'logs/plateforme.jsonl'],
+            the handler will use the default filename `'plateforme.log'`, or
+            `'plateforme.jsonl'` if the JSON formatter is used.""",
+        examples=['plateforme.log', 'plateforme.jsonl'],
     )
 
     max_bytes: int = Field(
@@ -1037,14 +1549,45 @@ class LoggingFileHandlerSettings(BaseModel):
         assert isinstance(obj, cls)
         if obj.filename is None:
             if obj.formatter == 'json':
-                obj.filename = 'logs/plateforme.jsonl'
+                obj.filename = 'plateforme.jsonl'
             else:
-                obj.filename = 'logs/plateforme.log'
+                obj.filename = 'plateforme.log'
         return obj
 
 
+# MARK:> Stream Handler
+
+class LoggingStreamHandlerSettingsDict(TypedDict, total=False):
+    """Plateforme logging stream handler settings dictionary."""
+
+    type: Required[Literal['stream']]
+    """The type of the handler set as ``'stream'`` and used to discriminate
+    between different handler types."""
+
+    level: Literal[
+        'DEBUG',
+        'INFO',
+        'WARNING',
+        'ERROR',
+        'CRITICAL',
+    ] | None
+    """The logging level for the stream handler. Defaults to ``None``."""
+
+    filters: list[str] | None
+    """A list of logging filters to use for the stream handler. Each filter
+    should be a fully qualified name of the filter class.
+    Defaults to ``None``."""
+
+    formatter: str
+    """The formatter name to use for the stream handler.
+    Defaults to ``'default'``."""
+
+    stream: str
+    """The stream to use for the handler.
+    Defaults to ``'ext://sys.stdout'``."""
+
 class LoggingStreamHandlerSettings(BaseModel):
-    """Logging stream handler settings."""
+    """Plateforme logging stream handler settings."""
 
     __config__ = ModelConfig(
         title='Logging stream handler settings',
@@ -1056,9 +1599,9 @@ class LoggingStreamHandlerSettings(BaseModel):
         default='stream',
         alias='type',
         title='Handler type',
-        init=False,
         description="""The type of the handler set as `'stream'` and used to
             discriminate between different handler types.""",
+        init=False,
     )
 
     level: Literal[
@@ -1098,12 +1641,43 @@ class LoggingStreamHandlerSettings(BaseModel):
     )
 
 
-LoggingHandlerSettings = Union[
-    LoggingCustomHandlerSettings,
-    LoggingFileHandlerSettings,
-    LoggingStreamHandlerSettings,
-]
-"""Logging handler settings."""
+# MARK: Logging Settings
+
+class LoggingSettingsDict(TypedDict, total=False):
+    """Plateforme logging settings dictionary."""
+
+    level: Literal[
+        'DEBUG',
+        'INFO',
+        'WARNING',
+        'ERROR',
+        'CRITICAL',
+    ]
+    """The logging level for the application. Defaults to ``'INFO'``."""
+
+    filters: dict[str, str]
+    """A dictionary of logging filters used in the application with their names
+    as keys and the fully qualified name of the filter class as values. By
+    default, it includes one built-in filter under the key ``'no_errors'`` that
+    can be overridden. If provided, the custom filters are merged with these
+    defaults. Defaults to an empty dictionary."""
+
+    formatters: dict[
+        str, LoggingFormatterSettings | LoggingFormatterSettingsDict
+    ]
+    """A dictionary of logging formatters used in the application. By default,
+    it includes three built-in formatters under the keys ``'default'``,
+    ``'color'``, and ``'json'`` that can be overridden. If provided, the custom
+    formatters are merged with these defaults.
+    Defaults to an empty dictionary."""
+
+    handlers: dict[
+        str, LoggingHandlerSettings | LoggingHandlerSettingsDict
+    ]
+    """A dictionary of logging handlers used in the application. By default, it
+    includes two built-in handlers under the keys ``'stdout'`` and ``'stderr'``
+    that can be overridden. If provided, the custom handlers are merged with
+    these defaults. Defaults to an empty dictionary."""
 
 
 class LoggingSettings(BaseModel):
@@ -1207,40 +1781,95 @@ class LoggingSettings(BaseModel):
         return obj
 
 
-class LoggingSettingsDict(TypedDict, total=False):
-    """Plateforme logging settings dictionary."""
-
-    level: Literal[
-        'DEBUG',
-        'INFO',
-        'WARNING',
-        'ERROR',
-        'CRITICAL',
-    ]
-    """The logging level for the application. Defaults to ``'INFO'``."""
-
-    filters: dict[str, str]
-    """A dictionary of logging filters used in the application with their names
-    as keys and the fully qualified name of the filter class as values. By
-    default, it includes one built-in filter under the key ``'no_errors'`` that
-    can be overridden. If provided, the custom filters are merged with these
-    defaults. Defaults to an empty dictionary."""
-
-    formatters: dict[str, LoggingFormatterSettings]
-    """A dictionary of logging formatters used in the application. By default,
-    it includes three built-in formatters under the keys ``'default'``,
-    ``'color'``, and ``'json'`` that can be overridden. If provided, the custom
-    formatters are merged with these defaults.
-    Defaults to an empty dictionary."""
-
-    handlers: dict[str, LoggingHandlerSettings]
-    """A dictionary of logging handlers used in the application. By default, it
-    includes two built-in handlers under the keys ``'stdout'`` and ``'stderr'``
-    that can be overridden. If provided, the custom handlers are merged with
-    these defaults. Defaults to an empty dictionary."""
-
-
 # MARK: Namespace Settings
+
+class NamespaceSettingsDict(TypedDict, total=False):
+    """Plateforme namespace settings dictionary."""
+
+    alias: str | None
+    """The namespace alias used to define which database schema should store
+    its resources in an application. Multiple namespaces can share the same
+    alias within an application. It must be formatted to snake case and
+    defaults to the namespace unique name (e.g. ``'my_namespace'`` for
+    ``'my_namespace'``). Defaults to ``None``."""
+
+    slug: str | None
+    """The namespace slug used to define which URL path should be used to
+    access the namespace resources in an API. Multiple namespaces can share the
+    same slug within an application. It must be formatted to kebab case and
+    defaults to the kebab case of the namespace unique name
+    (e.g. ``'my-namespace'`` for ``'my_namespace'``). Defaults to ``None``."""
+
+    title: str | None
+    """The namespace human-readable title that is used to display the namespace
+    verbose name within an application. It defaults to the titleized version of
+    the namespace unique name (e.g. ``'My Namepsace'`` for ``'my_namespace'``).
+    It is used within the API and will be added to the generated OpenAPI,
+    visible at ``'/docs'``. Defaults to ``None``."""
+
+    summary: str | None
+    """A short summary of the namespace. It will be added to the generated
+    OpenAPI, visible at ``'/docs'``. Defaults to ``None``."""
+
+    description: str | None
+    """A description of the namespace. Supports Markdown (using CommonMark
+    syntax). It will be added to the generated OpenAPI, visible at ``'/docs'``.
+    Defaults to ``None``."""
+
+    version: str | None
+    """The namespace version. It is used to define the version of the
+    namespace, not the version of the OpenAPI specification or the version of
+    the Plateforme framework being used. It will be added to the generated
+    OpenAPI, visible at ``'/docs'``. If not set, it will defaults to the
+    application version. Defaults to ``None``."""
+
+    contact: ContactInfo | ContactInfoDict | str | None
+    """The contact information for the namespace exposed API. It can be
+    provided either as a string with the contact name and optionally an email
+    address, or as a dictionary. The following fields will be added to the
+    generated OpenAPI, visible at ``'/docs'``:
+    - `name` (str): The name of the contact person or organization. If not
+        provided, it defaults to an empty string.
+    - `url` (str): An URL pointing to the contact information. It must be
+        formatted as a valid URL.
+    - `email` (str): The email address of the contact person or organization.
+        It must be formatted as a valid email address.
+    Defaults to ``None``."""
+
+    license: LicenseInfo | LicenseInfoDict | str | None
+    """The license information for the namespace exposed API. It can be
+    provided either as a string with the license name, or as a dictionary. The
+    following fields will be added to the generated OpenAPI, visible at
+    ``'/docs'``:
+    - `name` (str): The license name used for the API.
+    - `identifier` (str): An SPDX license expression for the API. The
+        `identifier` field is mutually exclusive of the `url` field.
+        Available since OpenAPI 3.1.0.
+    - `url` (str): An URL to the license used for the API. This must be
+        formatted as a valid URL.
+    Defaults to ``None``."""
+
+    terms_of_service: str | None
+    """A URL to the Terms of Service for the namespace exposed API. It will be
+    added to the generated OpenAPI, visible at ``'/docs'``.
+    Defaults to ``None``."""
+
+    api: APISettings | APISettingsDict
+    """The namespace API settings. Defaults to an empty dictionary."""
+
+    api_max_depth: int
+    """The maximum depth to walk through the resource path to collect manager
+    methods from resource dependencies. It is used to generate the API routes
+    for resources within the namespace. Defaults to ``2``."""
+
+    api_max_selection: int
+    """The limit of resources to return for the API route selections. It is
+    used when generating the API routes for resources within the namespace to
+    avoid too many resources being returned. Defaults to ``20``."""
+
+    deprecated: bool | None
+    """Whether the namespace is deprecated. Defaults to ``None``."""
+
 
 class NamespaceSettings(BaseModel):
     """Plateforme namespace settings."""
@@ -1270,7 +1899,7 @@ class NamespaceSettings(BaseModel):
             be used to access the namespace resources in an API. Multiple
             namespaces can share the same slug within an application. It must
             be formatted to kebab case and defaults to the kebab case of the
-            namespace alias (e.g. `my-namespace` for `my_namespace`).""",
+            namespace unique name (e.g. `my-namespace` for `my_namespace`).""",
         examples=['my-namepsace'],
         max_length=63,
         pattern=r'^$|' + RegexPattern.SLUG,
@@ -1281,9 +1910,10 @@ class NamespaceSettings(BaseModel):
         title='Title',
         description="""The namespace human-readable title that is used to
             display the namespace verbose name within an application. It
-            defaults to the titleized version of the namespace alias (e.g.
-            `My Namepsace` for `my_namespace`). It is used within the API and
-            will be added to the generated OpenAPI, visible at `/docs`.""",
+            defaults to the titleized version of the namespace unique name
+            (e.g. `My Namepsace` for `my_namespace`). It is used within the API
+            and will be added to the generated OpenAPI, visible at `'/docs'`.
+            """,
         examples=['My Namespace'],
         min_length=1,
         max_length=63,
@@ -1294,7 +1924,7 @@ class NamespaceSettings(BaseModel):
         default=None,
         title='Summary',
         description="""A short summary of the namespace. It will be added to
-            the generated OpenAPI, visible at `/docs`.""",
+            the generated OpenAPI, visible at `'/docs'`.""",
         examples=['This is a namespace summary'],
     )
 
@@ -1303,7 +1933,7 @@ class NamespaceSettings(BaseModel):
         title='Description',
         description="""A description of the namespace. Supports Markdown (using
             CommonMark syntax). It will be added to the generated OpenAPI,
-            visible at `/docs`.""",
+            visible at `'/docs'`.""",
         examples=['This is a namespace description.'],
     )
 
@@ -1313,7 +1943,7 @@ class NamespaceSettings(BaseModel):
         description="""The namespace version. It is used to define the version
             of the namespace, not the version of the OpenAPI specification or
             the version of the Plateforme framework being used. It will be
-            added to the generated OpenAPI, visible at `/docs`. If not set,
+            added to the generated OpenAPI, visible at `'/docs'`. If not set,
             it will defaults to the application version.""",
         examples=['0.1.0', '0.1.0-a1', '2.1.1'],
         pattern=RegexPattern.VERSION,
@@ -1325,7 +1955,8 @@ class NamespaceSettings(BaseModel):
         description="""The contact information for the namespace exposed API.
             It can be provided either as a string with the contact name and
             optionally an email address, or as a dictionary. The following
-            fields will be added to the generated OpenAPI, visible at `/docs`:
+            fields will be added to the generated OpenAPI, visible at
+            `'/docs'`:
             - `name` (str): The name of the contact person or organization. If
                 not provided, it defaults to an empty string.
             - `url` (str): An URL pointing to the contact information. It must
@@ -1346,7 +1977,7 @@ class NamespaceSettings(BaseModel):
         description="""The license information for the namespace exposed API.
             It can be provided either as a string with the license name, or as
             a dictionary. The following fields will be added to the generated
-            OpenAPI, visible at `/docs`:
+            OpenAPI, visible at `'/docs'`:
             - `name` (str): The license name used for the API.
             - `identifier` (str): An SPDX license expression for the API. The
                 `identifier` field is mutually exclusive of the `url` field.
@@ -1367,7 +1998,7 @@ class NamespaceSettings(BaseModel):
         title='Terms of service',
         description="""A URL to the Terms of Service for the namespace exposed
             API. It will be added to the generated OpenAPI, visible at
-            `/docs`.""",
+            `'/docs'`.""",
         examples=['https://example.com/terms-of-service'],
     )
 
@@ -1405,6 +2036,62 @@ class NamespaceSettings(BaseModel):
 
 # MARK: Package Settings
 
+class PackageSettingsDict(TypedDict, total=False):
+    """Plateforme package settings dictionary."""
+
+    namespace: str | None
+    """The package namespace name that is used to load the package and its
+    resources within an application. It is used to group resources and avoid
+    name collisions. Defaults to ``None``."""
+
+    tags: list[str | Enum] | None
+    """A list of tags to be applied to all the path operations in the package
+    router. It will be added to the generated OpenAPI, visible at ``'/docs'``.
+    If not provided, it defaults to the package slug. Defaults to ``None``."""
+
+    auto_mount: bool
+    """Whether to automatically mount the package within the API. When
+    disabled, the package must be manually mounted. Defaults to ``True``."""
+
+    api: APIRouterSettings | APIRouterSettingsDict
+    """The package API settings. Defaults to an empty dictionary."""
+
+    api_max_depth: int
+    """The maximum depth to walk through the resource path to collect manager
+    methods from resource dependencies. It is used to generate the API routes
+    for resources within the package. Defaults to ``2``."""
+
+    api_max_selection: int
+    """The limit of resources to return for the API route selections. It is
+    used when generating the API routes for resources within the package to
+    avoid too many resources being returned. Defaults to ``20``."""
+
+    api_resources: bool | Sequence[str]
+    """A boolean, or a list of module or resource fully qualified names
+    relative to the package that declares the top-level resources to include
+    from the package within the API. When set to ``True``, it includes all
+    resources exposed within the ``__init__.py`` file of the package. When set
+    to ``False``, the API will not include any resources from the package.
+    Permissions and access control can be applied to these resources.
+    Defaults to ``True``."""
+
+    api_services: bool | Sequence[str]
+    """A boolean, or a list of module or service fully qualified names relative
+    to the package that declares the services to include from the package
+    within the API. When set to ``True``, it includes all services exposed
+    within the ``__init__.py`` file of the package. When set to ``False``, the
+    API will not include any services from the package. Permissions and access
+    control can be applied to these services. Defaults to ``True``."""
+
+    deprecated: bool | None
+    """Whether the package is deprecated. Defaults to ``None``."""
+
+    file_path: str | None
+    """A string that defines the filesystem path of the package module. It is
+    used to load package related assets from the filesystem. It defaults to the
+    resolved package module path when not provided. Defaults to ``None``."""
+
+
 class PackageSettings(BaseModel):
     """Plateforme package settings."""
 
@@ -1429,7 +2116,7 @@ class PackageSettings(BaseModel):
         title='Tags',
         description="""A list of tags to be applied to all the path operations
             in the package router. It will be added to the generated OpenAPI,
-            visible at `/docs`. If not provided, it defaults to the package
+            visible at `'/docs'`. If not provided, it defaults to the package
             slug.""",
         examples=[['products'], ['auth', 'users']],
     )
@@ -1513,6 +2200,160 @@ class PackageSettings(BaseModel):
 
 # MARK: Settings
 
+class SettingsDict(TypedDict, total=False):
+    """Plateforme application settings dictionary."""
+
+    # Environment
+    context: bool
+    """Whether to set up and maintain the application context in the current
+    thread when creating the instance. When enabled, the application context
+    will be set to the current application being initialized, and won't require
+    an explicit context manager. Defaults to ``True``."""
+
+    debug: bool
+    """Whether to run the application in debug mode. When debug mode is
+    enabled, debug tracebacks will be returned on server and the application
+    will automatically reload when changes are detected in the underlying code.
+    Defaults to ``False``."""
+
+    logging: LoggingSettings | LoggingSettingsDict | bool
+    """Whether to enable logging in the application. When enabled, the
+    application will log messages to the configured handlers. It accepts either
+    a boolean to enable or disable default logging settings or a dictionary
+    with custom logging settings. Defaults to ``True``."""
+
+    secret_key: SecretStr | str
+    """The application secret key. If not provided, a random alphanumeric
+    secret key marked as insecure will be generated. Please note that it must
+    be kept secret and should not be shared, it's insecure to use a secret key
+    in a public repository. Consider using an environment variable instead.
+    Defaults to a random secret key."""
+
+    # Information
+    title: str
+    """The application human-readable title that is used to display the
+    application verbose name and will be added to the generated OpenAPI,
+    visible at ``'/docs'``. When not provided, a random title will be
+    generated. Defaults to a random title."""
+
+    summary: str | None
+    """A short summary of the application. It will be added to the generated
+    OpenAPI, visible at ``'/docs'``. Defaults to ``None``."""
+
+    description: str | None
+    """A description of the application. Supports Markdown (using CommonMark
+    syntax). It will be added to the generated OpenAPI, visible at ``'/docs'``.
+    Defaults to ``None``."""
+
+    version: str
+    """The application version. It is used to define the version of the
+    application, not the version of the OpenAPI specification or the version
+    of the Plateforme framework being used. It will be added to the generated
+    OpenAPI, visible at ``'/docs'``. Defaults to ``'0.1.0'``."""
+
+    contact: ContactInfo | ContactInfoDict | str | None
+    """The contact information for the application exposed API. It can be
+    provided either as a string with the contact name and optionally an email
+    address, or as a dictionary. The following fields will be added to the
+    generated OpenAPI, visible at ``'/docs'``:
+    - `name` (str): The name of the contact person or organization. If not
+        provided, it defaults to an empty string.
+    - `url` (str): An URL pointing to the contact information. It must be
+        formatted as a valid URL.
+    - `email` (str): The email address of the contact person or organization.
+        It must be formatted as a valid email address.
+    Defaults to ``None``."""
+
+    license: LicenseInfo | LicenseInfoDict | str | None
+    """The license information for the application exposed API. It can be
+    provided either as a string with the license name, or as a dictionary. The
+    following fields will be added to the generated OpenAPI, visible at
+    ``'/docs'``:
+    - `name` (str): The license name used for the API.
+    - `identifier` (str): An SPDX license expression for the API. The
+        `identifier` field is mutually exclusive of the `url` field.
+        Available since OpenAPI 3.1.0.
+    - `url` (str): An URL to the license used for the API. This must be
+        formatted as a valid URL.
+    Defaults to ``None``."""
+
+    terms_of_service: str | None
+    """A URL to the Terms of Service for the application exposed API. It will
+    be added to the generated OpenAPI, visible at ``'/docs'``.
+    Defaults to ``None``."""
+
+    # Internationalization
+    language: str
+    """The application language code. Defaults to ``'en'``."""
+
+    timezone: str
+    """The application time zone code. Defaults to ``'UTC'``."""
+
+    # Application
+    namespaces: Sequence[
+        str | tuple[str, NamespaceSettings | NamespaceSettingsDict]
+    ]
+    """The application namespaces to load. Each namespace can be provided
+    either as a string for the namespace name or a tuple with the namespace
+    name and its settings. The namespace name is used to group package
+    resources and services within the application to avoid name collisions.
+    The default namespace uses the empty string as its name ``''``. The
+    namespace settings are used to override the default namespace
+    implementation configuration. Defaults to an empty list."""
+
+    packages: Sequence[
+        str | tuple[str, PackageSettings | PackageSettingsDict]
+    ]
+    """The application packages to load. Each package can be provided either
+    as a string for the package name or a tuple with the package name and its
+    settings. The package name is used to load the package with its resources
+    and services within the application. The package settings are used to
+    override the default package implementation configuration. The default
+    special package symbol ``$`` is used to reference the application caller
+    package and load its module resources and services.
+    Defaults to a list with the special package symbol ``'$'``."""
+
+    auto_import_dependencies: bool
+    """Whether to automatically import dependencies of the application
+    packages. Auto-imported package dependencies are implemented with their
+    default settings. Defaults to ``True``."""
+
+    auto_import_namespaces: bool
+    """Whether to automatically import and create missing namespace
+    configurations for packages within the application.
+    Defaults to ``True``."""
+
+    api: APISettings | APISettingsDict
+    """The API settings. Defaults to the default API settings."""
+
+    api_max_depth: int
+    """The maximum depth to walk through the resource path to collect manager
+    methods from resource dependencies. It is used to generate the API routes
+    for resources within the application. Defaults to ``2``."""
+
+    api_max_selection: int
+    """The limit of resources to return for the API route selections. It is
+    used when generating the API routes for resources within the application
+    to avoid too many resources being returned. Defaults to ``20``."""
+
+    deprecated: bool | None
+    """Whether the application is deprecated. Defaults to ``None``."""
+
+    database_engines: EngineMap | dict[str, Path | str] | Path | str
+    """The application database engines. It accepts either:
+    - A string with the database engine URL such as ``':memory:'`` for an
+        in-memory SQLite database, a path to a SQLite database file, or a
+        database URL for other database engines.
+    - A dictionary with the database engine URL for the default engine and
+        other engines.
+    Defaults to ``':memory:'``."""
+
+    database_routers: Sequence[str]
+    """The application database routers. A list of either module names from
+    which to import database routers, or fully qualified names of database
+    routers. Defaults to an empty list."""
+
+
 class Settings(_BaseSettings):
     """Plateforme application settings."""
 
@@ -1557,13 +2398,13 @@ class Settings(_BaseSettings):
                         'file_json': {
                             'type': 'file',
                             'formatter': 'json',
-                            'filename': 'logs/my_app.jsonl',
+                            'filename': 'my_app.jsonl',
                         },
                         'file_text': {
                             'type': 'file',
                             'level': 'ERROR',
                             'formatter': 'default',
-                            'filename': 'logs/my_app_errors.log',
+                            'filename': 'my_app_errors.log',
                         },
                     },
                 },
@@ -1592,8 +2433,8 @@ class Settings(_BaseSettings):
         title='Title',
         description="""The application human-readable title that is used to
             display the application verbose name and will be added to the
-            generated OpenAPI, visible at `/docs`. When not provided, a random
-            title will be generated.""",
+            generated OpenAPI, visible at `'/docs'`. When not provided, a
+            random title will be generated.""",
         examples=['My Plateforme'],
         min_length=1,
         max_length=63,
@@ -1604,7 +2445,7 @@ class Settings(_BaseSettings):
         default=None,
         title='Summary',
         description="""A short summary of the application. It will be added to
-            the generated OpenAPI, visible at `/docs`.""",
+            the generated OpenAPI, visible at `'/docs'`.""",
         examples=['My Plateforme application summary'],
     )
 
@@ -1613,7 +2454,7 @@ class Settings(_BaseSettings):
         title='Description',
         description="""A description of the application. Supports Markdown
             (using CommonMark syntax). It will be added to the generated
-            OpenAPI, visible at `/docs`.""",
+            OpenAPI, visible at `'/docs'`.""",
         examples=['This is a Plateforme application description.'],
     )
 
@@ -1624,7 +2465,7 @@ class Settings(_BaseSettings):
             version of the application, not the version of the OpenAPI
             specification or the version of the Plateforme framework being
             used. It will be added to the generated OpenAPI, visible at
-            `/docs`.""",
+            `'/docs'`.""",
         examples=['0.1.0', '0.1.0-a1', '2.1.1'],
         pattern=RegexPattern.VERSION,
     )
@@ -1635,7 +2476,8 @@ class Settings(_BaseSettings):
         description="""The contact information for the application exposed API.
             It can be provided either as a string with the contact name and
             optionally an email address, or as a dictionary. The following
-            fields will be added to the generated OpenAPI, visible at `/docs`:
+            fields will be added to the generated OpenAPI, visible at
+            `'/docs'`:
             - `name` (str): The name of the contact person or organization. If
                 not provided, it defaults to an empty string.
             - `url` (str): An URL pointing to the contact information. It must
@@ -1656,7 +2498,7 @@ class Settings(_BaseSettings):
         description="""The license information for the application exposed API.
             It can be provided either as a string with the license name, or as
             a dictionary. The following fields will be added to the generated
-            OpenAPI, visible at `/docs`:
+            OpenAPI, visible at `'/docs'`:
             - `name` (str): The license name used for the API.
             - `identifier` (str): An SPDX license expression for the API. The
                 `identifier` field is mutually exclusive of the `url` field.
@@ -1677,7 +2519,7 @@ class Settings(_BaseSettings):
         title='Terms of service',
         description="""A URL to the Terms of Service for the application
             exposed API. It will be added to the generated OpenAPI, visible at
-            `/docs`.""",
+            `'/docs'`.""",
         examples=['https://example.com/terms-of-service'],
     )
 
@@ -1817,165 +2659,13 @@ class Settings(_BaseSettings):
     )
 
 
-# MARK: Settings Dictionary
-
-class SettingsDict(TypedDict, total=False):
-    """Plateforme application settings dictionary."""
-
-    # Environment
-    context: bool
-    """Whether to set up and maintain the application context in the current
-    thread when creating the instance. When enabled, the application context
-    will be set to the current application being initialized, and won't require
-    an explicit context manager. Defaults to ``True``."""
-
-    debug: bool
-    """Whether to run the application in debug mode. When debug mode is
-    enabled, debug tracebacks will be returned on server and the application
-    will automatically reload when changes are detected in the underlying code.
-    Defaults to ``False``."""
-
-    logging: LoggingSettings | LoggingSettingsDict | bool
-    """Whether to enable logging in the application. When enabled, the
-    application will log messages to the configured handlers. It accepts either
-    a boolean to enable or disable default logging settings or a dictionary
-    with custom logging settings. Defaults to ``True``."""
-
-    secret_key: SecretStr | str
-    """The application secret key. If not provided, a random alphanumeric
-    secret key marked as insecure will be generated. Please note that it must
-    be kept secret and should not be shared, it's insecure to use a secret key
-    in a public repository. Consider using an environment variable instead.
-    Defaults to a random secret key."""
-
-    # Information
-    title: str
-    """The application human-readable title that is used to display the
-    application verbose name and will be added to the generated OpenAPI,
-    visible at ``/docs``. When not provided, a random title will be generated.
-    Defaults to a random title."""
-
-    summary: str | None
-    """A short summary of the application. It will be added to the generated
-    OpenAPI, visible at ``/docs``. Defaults to ``None``."""
-
-    description: str | None
-    """A description of the application. Supports Markdown (using CommonMark
-    syntax). It will be added to the generated OpenAPI, visible at ``/docs``.
-    Defaults to ``None``."""
-
-    version: str
-    """The application version. It is used to define the version of the
-    application, not the version of the OpenAPI specification or the version
-    of the Plateforme framework being used. It will be added to the generated
-    OpenAPI, visible at ``/docs``. Defaults to ``'0.1.0'``."""
-
-    contact: ContactInfo | ContactInfoDict | str | None
-    """The contact information for the application exposed API. It can be
-    provided either as a string with the contact name and optionally an email
-    address, or as a dictionary. The following fields will be added to the
-    generated OpenAPI, visible at ``/docs``:
-    - ``name`` (str): The name of the contact person or organization. If not
-        provided, it defaults to an empty string.
-    - ``url`` (str): An URL pointing to the contact information. It must be
-        formatted as a valid URL.
-    - ``email`` (str): The email address of the contact person or organization.
-        It must be formatted as a valid email address.
-    Defaults to ``None``."""
-
-    license: LicenseInfo | LicenseInfoDict | str | None
-    """The license information for the application exposed API. It can be
-    provided either as a string with the license name, or as a dictionary. The
-    following fields will be added to the generated OpenAPI, visible at
-    ``/docs``:
-    - ``name`` (str): The license name used for the API.
-    - ``identifier`` (str): An SPDX license expression for the API. The
-        ``identifier`` field is mutually exclusive of the ``url`` field.
-        Available since OpenAPI 3.1.0.
-    - ``url`` (str): An URL to the license used for the API. This must be
-        formatted as a valid URL.
-    Defaults to ``None``."""
-
-    terms_of_service: str | None
-    """A URL to the Terms of Service for the application exposed API. It will
-    be added to the generated OpenAPI, visible at ``/docs``.
-    Defaults to ``None``."""
-
-    # Internationalization
-    language: str
-    """The application language code. Defaults to ``'en'``."""
-
-    timezone: str
-    """The application time zone code. Defaults to ``'UTC'``."""
-
-    # Application
-    namespaces: Sequence[str | tuple[str, NamespaceSettings]]
-    """The application namespaces to load. Each namespace can be provided
-    either as a string for the namespace name or a tuple with the namespace
-    name and its settings. The namespace name is used to group package
-    resources and services within the application to avoid name collisions.
-    The default namespace uses the empty string as its name ``''``. The
-    namespace settings are used to override the default namespace
-    implementation configuration. Defaults to an empty list."""
-
-    packages: Sequence[str | tuple[str, PackageSettings]]
-    """The application packages to load. Each package can be provided either
-    as a string for the package name or a tuple with the package name and its
-    settings. The package name is used to load the package with its resources
-    and services within the application. The package settings are used to
-    override the default package implementation configuration. The default
-    special package symbol ``$`` is used to reference the application caller
-    package and load its module resources and services.
-    Defaults to a list with the special package symbol ``'$'``."""
-
-    auto_import_dependencies: bool
-    """Whether to automatically import dependencies of the application
-    packages. Auto-imported package dependencies are implemented with their
-    default settings. Defaults to ``True``."""
-
-    auto_import_namespaces: bool
-    """Whether to automatically import and create missing namespace
-    configurations for packages within the application.
-    Defaults to ``True``."""
-
-    api: APISettings
-    """The API settings. Defaults to the default API settings."""
-
-    api_max_depth: int
-    """The maximum depth to walk through the resource path to collect manager
-    methods from resource dependencies. It is used to generate the API routes
-    for resources within the application. Defaults to ``2``."""
-
-    api_max_selection: int
-    """The limit of resources to return for the API route selections. It is
-    used when generating the API routes for resources within the application
-    to avoid too many resources being returned. Defaults to ``20``."""
-
-    deprecated: bool | None
-    """Whether the application is deprecated. Defaults to ``None``."""
-
-    database_engines: EngineMap | dict[str, Path | str] | Path | str
-    """The application database engines. It accepts either:
-    - A string with the database engine URL such as ``':memory:'`` for an
-        in-memory SQLite database, a path to a SQLite database file, or a
-        database URL for other database engines.
-    - A dictionary with the database engine URL for the default engine and
-        other engines.
-    Defaults to ``':memory:'``."""
-
-    database_routers: Sequence[str]
-    """The application database routers. A list of either module names from
-    which to import database routers, or fully qualified names of database
-    routers. Defaults to an empty list."""
-
-
 # MARK: Utilities
 
 def merge_settings(
-    settings: _T,
+    settings: Model,
     *others: BaseModel | None,
     **update: Any,
-) -> _T:
+) -> Model:
     """Merge multiple settings into a single settings instance.
 
     It copies the provided settings model instance and merges other settings

@@ -110,7 +110,6 @@ from .runtime import (
     Task,
 )
 from .schema import core as core_schema
-from .schema.aliases import AliasChoices
 from .schema.core import (
     CoreSchema,
     GetCoreSchemaHandler,
@@ -3323,7 +3322,6 @@ class BaseResource(
         description='Resource type',
         init=False,
         frozen=True,
-        validation_alias=AliasChoices('type', 'type_'),
     )
 
     if typing.TYPE_CHECKING:
