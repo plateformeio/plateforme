@@ -9,14 +9,13 @@
 Information utilities for the command line interface.
 """
 
-import os
-
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
 from plateforme.framework import VERSION
 
+from .config import supports_utf8
 from .context import Context
 from .styles import Styles
 
@@ -29,7 +28,7 @@ console = Console()
 
 def print_info(ctx: Context) -> None:
     """Print the version information."""
-    emoji = '🏗  ' if _supports_utf8() else ''
+    emoji = '🏗  ' if supports_utf8() else ''
     title = Text(TITLE, style=Styles.TITLE.value)
     version = Text(VERSION, style=Styles.VERSION.value)
     info = Text.assemble(emoji, title, ' ', version)
@@ -39,10 +38,3 @@ def print_info(ctx: Context) -> None:
 
     panel = Panel(info, border_style='dim', expand=False, padding=(0, 1))
     console.print(panel)
-
-
-def _supports_utf8() -> bool:
-    lang = os.environ.get('LANG', '').lower()
-    if 'utf-8' in lang or 'utf8' in lang:
-        return True
-    return False

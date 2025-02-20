@@ -8,3 +8,12 @@
 """
 Configuration utilities for the command line interface.
 """
+
+import os
+
+
+def supports_utf8() -> bool:
+    lang = os.environ.get('LANG', '').lower()
+    if 'utf-8' in lang or 'utf8' in lang:
+        return True
+    return False

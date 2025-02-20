@@ -41,6 +41,7 @@ __all__ = (
     'NoErrorFilter',
     'logger'
     'setup_logging',
+    'supports_ansi_colors',
 )
 
 
@@ -208,7 +209,7 @@ class DefaultFormatter(logging.Formatter):
         fmt_keys = fmt_keys.copy() if fmt_keys else {}
         self.asctime = fmt_keys.pop('asctime', False)
         self.use_colors = fmt_keys.pop('use_colors', False) \
-            and _supports_ansi_colors()
+            and supports_ansi_colors()
 
     @override
     def format(self, record: logging.LogRecord) -> str:
@@ -295,7 +296,7 @@ class NoErrorFilter(logging.Filter):
 
 # MARK: Utilities
 
-def _supports_ansi_colors() -> bool:
+def supports_ansi_colors() -> bool:
     """Whether the terminal supports ANSI escape codes."""
     if not sys.stdout.isatty():
         return False
