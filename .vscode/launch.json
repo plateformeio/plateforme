@@ -10,8 +10,8 @@
       "name": "Python File",
       "type": "debugpy",
       "request": "launch",
-      "cwd": "${fileDirname}",
       "program": "${file}",
+      "cwd": "${fileDirname}",
       "python": "${command:python.interpreterPath}",
       "console": "integratedTerminal",
       "justMyCode": false
@@ -20,8 +20,8 @@
       "name": "Python Module",
       "type": "debugpy",
       "request": "launch",
-      "cwd": "${workspaceFolder}/${input:projectFolder}",
       "module": "${input:projectFile}",
+      "cwd": "${workspaceFolder}/${input:projectFolder}",
       "python": "${command:python.interpreterPath}",
       "console": "integratedTerminal",
       "justMyCode": false
@@ -43,8 +43,8 @@
       "type": "debugpy",
       "request": "launch",
       "module": "plateforme",
-      "cwd": "${workspaceFolder}",
       "args": "${input:command}",
+      "cwd": "${workspaceFolder}",
       "python": "${command:python.interpreterPath}",
       "console": "integratedTerminal",
       "justMyCode": false
@@ -54,8 +54,8 @@
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
-      "cwd": "${workspaceFolder}/${input:projectFolder}",
       "args": ["${input:projectFile}:app", "--port", "8001", "--reload", "--lifespan", "on"],
+      "cwd": "${workspaceFolder}/${input:projectFolder}",
       "python": "${command:python.interpreterPath}",
       "console": "integratedTerminal",
       "justMyCode": false
