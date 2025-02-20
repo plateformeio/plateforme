@@ -398,7 +398,7 @@ class ConfigWrapperMeta(type):
                 )
             fields[name].default = value
 
-        # Check wether all non required fields have default values
+        # Check whether all non required fields have default values
         for name in check_for_default:
             if fields[name].default is Undefined \
                     and fields[name].default_factory is None:

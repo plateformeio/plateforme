@@ -14,6 +14,8 @@ as well as the specific formatters and filters used by the framework.
 import atexit
 import json
 import logging
+import os
+import sys
 import typing
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -205,7 +207,8 @@ class DefaultFormatter(logging.Formatter):
 
         fmt_keys = fmt_keys.copy() if fmt_keys else {}
         self.asctime = fmt_keys.pop('asctime', False)
-        self.use_colors = fmt_keys.pop('use_colors', False)
+        self.use_colors = fmt_keys.pop('use_colors', False) \
+            and _supports_ansi_colors()
 
     @override
     def format(self, record: logging.LogRecord) -> str:
@@ -288,3 +291,48 @@ class NoErrorFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         """Filter log records with a level of INFO or lower."""
         return record.levelno <= logging.INFO
+
+
+# MARK: Utilities
+
+def _supports_ansi_colors() -> bool:
+    """Whether the terminal supports ANSI escape codes."""
+    if not sys.stdout.isatty():
+        return False
+
+    # Check environment flags
+    if 'NO_COLOR' in os.environ or 'NOCOLOR' in os.environ:
+        return False
+    if 'FORCE_COLOR' in os.environ:
+        return True
+    if 'CLICOLOR_FORCE' in os.environ and os.environ['CLICOLOR_FORCE'] != '0':
+        return True
+    if 'CLICOLOR' in os.environ and os.environ['CLICOLOR'] == '0':
+        return False
+    if 'COLORTERM' in os.environ:
+        return True
+
+    # Check environment terms
+    term = os.environ.get('TERM', '').lower()
+    if term in ('dumb', ''):
+        return False
+    supported_terms = ('xterm', 'xterm-256color', 'screen', 'vt100', 'linux')
+    if any(t in term for t in supported_terms):
+        return True
+
+    # Check Windows terminal support
+    if sys.platform == "win32":
+        if 'WT_SESSION' in os.environ or 'TERM_PROGRAM' in os.environ:
+            return True
+        try:
+            from ctypes import byref, c_int, windll
+            handle = windll.kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+            mode = c_int()
+            if not windll.kernel32.GetConsoleMode(handle, byref(mode)):
+                return False
+            value = mode.value & 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+            return bool(value)
+        except (ImportError, OSError, AttributeError):
+            return False
+
+    return True
