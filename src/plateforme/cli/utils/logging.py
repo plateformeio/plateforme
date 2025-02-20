@@ -23,12 +23,13 @@ def setup_cli_logger(level: int = logging.INFO) -> logging.Logger:
             if supports_ansi_colors():
                 color_start = COLOR_MAP.get(record.levelname, Color.RESET)
                 color_end = Color.RESET
-                color_offset = len(color_start + color_end)
                 levelname = f'{color_start}{record.levelname}{color_end}:'
+                levelname_offset = len(color_start + color_end)
             else:
                 levelname = f'{record.levelname}:'
+                levelname_offset = 0
 
-            record.levelname = levelname.ljust(color_offset + 10)
+            record.levelname = levelname.ljust(levelname_offset + 10)
             return super().format(record)
 
     logger = logging.getLogger('plateforme_cli')
