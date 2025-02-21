@@ -71,7 +71,7 @@ from pydantic.main import (
 )
 from typing_extensions import TypedDict
 
-from ..config import ConfigDict, Configurable, ConfigurableMeta, ConfigWrapper
+from ..config import Configurable, ConfigurableMeta, ConfigWrapper
 from ..context import VALIDATION_CONTEXT
 from ..errors import MissingDeferred, PlateformeError
 from ..expressions import IncEx, IncExPredicate
@@ -199,7 +199,7 @@ def NoInitField(*, init: Literal[False] = False) -> Any:
 # MARK: Model Configuration
 
 class BaseModelConfigDict(TypedDict, total=False):
-    """A model class configuration dictionary."""
+    """A base model class configuration dictionary."""
 
     alias: str
     """The alias name of the model. It must adhere to a specific ``ALIAS``
@@ -616,7 +616,7 @@ class ModelConfig(ConfigWrapper):
 class ModelMeta(ConfigurableMeta, _ModelMeta):
     """Meta class for the base model class."""
     if typing.TYPE_CHECKING:
-        __config__: ModelConfig | ConfigDict[ModelConfigDict]
+        __config__: ModelConfig | ModelConfigDict
         __pydantic_owner__: Literal['model', 'resource']
         __pydantic_resource__: 'ResourceType | None'
         model_adapter: TypeAdapterList['BaseModel']
@@ -800,7 +800,7 @@ class BaseModel(_BaseModel, Configurable[ModelConfig], metaclass=ModelMeta):
             attributes set on the model instance.
     """
     if typing.TYPE_CHECKING:
-        __config__: ClassVar[ModelConfig | ConfigDict[ModelConfigDict]]
+        __config__: ClassVar[ModelConfig | ModelConfigDict]
         __pydantic_owner__: ClassVar[Literal['model', 'resource']]
         __pydantic_resource__: ClassVar['ResourceType | None']
         __pydantic_adapter__: ClassVar[TypeAdapterList['BaseModel']]

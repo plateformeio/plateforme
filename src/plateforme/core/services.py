@@ -28,7 +28,7 @@ import inspect
 import re
 import typing
 from abc import ABCMeta
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
 from typing import (
@@ -42,6 +42,7 @@ from typing import (
     Self,
     Type,
     TypeVar,
+    Unpack,
 )
 
 from typing_extensions import TypedDict
@@ -49,7 +50,7 @@ from typing_extensions import TypedDict
 from .api.dependencies import AsyncSessionDep, filter_dependency
 from .api.parameters import Body, Depends, Payload, Query, Selection
 from .api.routing import APIMethod, APIMode, APIRouteConfig, route
-from .config import ConfigDict, Configurable, ConfigurableMeta, ConfigWrapper
+from .config import Configurable, ConfigurableMeta, ConfigWrapper
 from .database.orm import InstrumentedAttribute
 from .errors import PlateformeError
 from .expressions import Filter, IncEx, Sort
@@ -89,6 +90,7 @@ PROTECTED_ATTRS = (r'__config__', r'service_.*')
 
 __all__ = (
     'BaseService',
+    'BaseServiceConfigDict',
     'BaseServiceWithSpec',
     'CRUDService',
     'Service',
@@ -102,6 +104,7 @@ __all__ = (
     'copy_service',
     'load_service',
     'unbind_service',
+    'validate_service_method',
 )
 
 
@@ -200,30 +203,25 @@ class ServiceWithSpecFacade(ServiceFacade, Protocol):
 
 # MARK: Service Configuration
 
-class ServiceConfigDict(TypedDict, total=False):
-    """A service class configuration dictionary."""
+class BaseServiceConfigDict(TypedDict, total=False):
+    """A base service class configuration dictionary."""
 
-    name: str
-    """The name of the service. It must adhere to a specific ``ALIAS`` pattern
-    as defined in the framework's regular expressions repository. It is
-    inferred from the snake case version of the service name."""
-
-    include: list[str] | set[str] | None
+    include: list[str] | set[str] | str | None
     """The method names to include when binding the service."""
 
-    exclude: list[str] | set[str] | None
+    exclude: list[str] | set[str] | str | None
     """The method names to exclude when binding the service."""
 
-    include_method: list[APIMethod] | set[APIMethod] | None
+    include_method: list[APIMethod] | set[APIMethod] | APIMethod | None
     """The HTTP methods to include when binding the service."""
 
-    exclude_method: list[APIMethod] | set[APIMethod] | None
+    exclude_method: list[APIMethod] | set[APIMethod] | APIMethod | None
     """The HTTP methods to exclude when binding the service."""
 
-    include_mode: list[APIMode] | set[APIMode] | None
+    include_mode: list[APIMode] | set[APIMode] | APIMode | None
     """The method modes to include when binding the service."""
 
-    exclude_mode: list[APIMode] | set[APIMode] | None
+    exclude_mode: list[APIMode] | set[APIMode] | APIMode | None
     """The method modes to exclude when binding the service."""
 
     limit: int
@@ -239,10 +237,21 @@ class ServiceConfigDict(TypedDict, total=False):
     service to a facade owner."""
 
 
+class ServiceConfigDict(BaseServiceConfigDict, total=False):
+    """A service class configuration dictionary."""
+
+    name: str
+    """The name of the service. It must adhere to a specific ``ALIAS`` pattern
+    as defined in the framework's regular expressions repository. It is
+    inferred from the snake case version of the service name."""
+
+
 class ServiceConfig(ConfigWrapper):
     """A service class configuration."""
     if typing.TYPE_CHECKING:
         __config_owner__: ServiceType = ConfigField(frozen=True, init=False)
+
+    __config_mutable__ = True
 
     type_: str = ConfigField(default='service', frozen=True, init=False)
     """The configuration owner type set to ``service``. It is a protected field
@@ -254,25 +263,25 @@ class ServiceConfig(ConfigWrapper):
     as defined in the framework's regular expressions repository. It is
     inferred from the snake case version of the service name."""
 
-    include: list[str] | set[str] | None = ConfigField(default=None)
+    include: list[str] | set[str] | str | None = ConfigField(default=None)
     """The method names to include when binding the service."""
 
-    exclude: list[str] | set[str] | None = ConfigField(default=None)
+    exclude: list[str] | set[str] | str | None = ConfigField(default=None)
     """The method names to exclude when binding the service."""
 
-    include_method: list[APIMethod] | set[APIMethod] | None = \
+    include_method: list[APIMethod] | set[APIMethod] | APIMethod | None = \
         ConfigField(default=None)
     """The HTTP methods to include when binding the service."""
 
-    exclude_method: list[APIMethod] | set[APIMethod] | None = \
+    exclude_method: list[APIMethod] | set[APIMethod] | APIMethod | None = \
         ConfigField(default=None)
     """The HTTP methods to exclude when binding the service."""
 
-    include_mode: list[APIMode] | set[APIMode] | None = \
+    include_mode: list[APIMode] | set[APIMode] | APIMode | None = \
         ConfigField(default=None)
     """The method modes to include when binding the service."""
 
-    exclude_mode: list[APIMode] | set[APIMode] | None = \
+    exclude_mode: list[APIMode] | set[APIMode] | APIMode | None = \
         ConfigField(default=None)
     """The method modes to exclude when binding the service."""
 
@@ -320,7 +329,7 @@ class ServiceConfig(ConfigWrapper):
 class ServiceMeta(ABCMeta, ConfigurableMeta):
     """A metaclass for service classes."""
     if typing.TYPE_CHECKING:
-        __config__: ServiceConfig | ConfigDict[ServiceConfigDict]
+        __config__: ServiceConfig | ServiceConfigDict
         __config_spec__: SpecType | None
         service_config: ServiceConfig
         service_methods: dict[str, FunctionLenientType]
@@ -448,10 +457,11 @@ class BaseService(Configurable[ServiceConfig], metaclass=ServiceMeta):
         define public methods that can be bound to the service facade owner.
     """
     if typing.TYPE_CHECKING:
-        __config__: ClassVar[ServiceConfig | ConfigDict[ServiceConfigDict]]
+        __config__: ClassVar[ServiceConfig | ServiceConfigDict]
         __config_spec__: ClassVar[SpecType | None]
-        service_config: ClassVar[ServiceConfig]
         service_methods: ClassVar[dict[str, FunctionLenientType]]
+
+        service_config: ServiceConfig
         service_owner: ServiceFacade | ServiceWithSpecFacade | None
 
     __config__ = ServiceConfig()
@@ -462,23 +472,23 @@ class BaseService(Configurable[ServiceConfig], metaclass=ServiceMeta):
             raise TypeError(
                 "A base service class cannot be directly instantiated."
             )
-        return super().__new__(cls)
+        self = super().__new__(cls)
+        object.__setattr__(self, 'service_owner', None)
+        return self
 
-    def __init__(self, name: str | None = None) -> None:
+    def __init__(self, **kwargs: Unpack[ServiceConfigDict]) -> None:
         """Initialize the service.
 
         Args:
-            name: The name of the service. If provided, it will update the
-                service name in the service configuration. This can be useful
-                when multiple services have the same name and need to be
-                uniquely identified.
+            **kwargs: The service configuration overrides.
+
+        Note:
+            When multiple services have the same name and need to be uniquely
+            identified, the service name can be updated by providing the `name`
+            keyword argument.
         """
         super().__init__()
-
-        if name is not None:
-            self.service_config.name = name
-
-        object.__setattr__(self, 'service_owner', None)
+        self.service_config.update(**kwargs)
 
     def __post_bind__(
         self, facade: ServiceFacade | ServiceWithSpecFacade
@@ -639,16 +649,18 @@ class BaseServiceWithSpec(BaseService, Generic[Spec]):
             )
         return super().__new__(cls)
 
-    def __init__(self, name: str | None = None) -> None:
+    def __init__(self, **kwargs: Unpack[ServiceConfigDict]) -> None:
         """Initialize the service.
 
         Args:
-            name: The name of the service. If provided, it will update the
-                service name in the service configuration. This can be useful
-                when multiple services have the same name and need to be
-                uniquely identified.
+            **kwargs: The service configuration overrides.
+
+        Note:
+            When multiple services have the same name and need to be uniquely
+            identified, the service name can be updated by providing the `name`
+            keyword argument.
         """
-        super().__init__(name)
+        super().__init__(**kwargs)
 
     def __post_bind__(  # type: ignore[override, unused-ignore]
         self, facade: ServiceWithSpecFacade
@@ -689,6 +701,10 @@ class BaseServiceWithSpec(BaseService, Generic[Spec]):
 
 class CRUDService(BaseServiceWithSpec[CRUDSpec]):
     """The CRUD services."""
+
+    __config__ = {
+        'name': 'crud',
+    }
 
     # MARK:> Create
 
@@ -1079,9 +1095,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
 
         async with session.bulk() as bulk:
             # Validate payload
-            result_staged = self.resource_adapter.validate_python(
-                result_dirty, from_attributes=True
-            )
+            result_staged = self.resource_adapter.validate_python(result_dirty)
             # Resolve references
             await bulk.resolve(
                 raise_errors=True,
@@ -1090,7 +1104,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
             )
 
         # Merge staged instances into the session
-        result = []
+        result: list[CRUDSpec] = []
         for instance_staged in result_staged:
             instance = await session.merge(instance_staged)
             result.append(instance)
@@ -1297,9 +1311,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
 
         async with session.bulk() as bulk:
             # Validate payload
-            result_staged = self.resource_adapter.validate_python(
-                result_dirty, from_attributes=True
-            )
+            result_staged = self.resource_adapter.validate_python(result_dirty)
             # Resolve references
             await bulk.resolve(
                 raise_errors=True,
@@ -1308,7 +1320,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
             )
 
         # Merge staged instances into the session
-        result = []
+        result: list[CRUDSpec] = []
         for instance_staged in result_staged:
             instance = await session.merge(instance_staged)
             result.append(instance)
@@ -1744,7 +1756,10 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
 # MARK: Utilities
 
 def bind_service(
-    service: BaseService, facade: ServiceFacade | ServiceWithSpecFacade
+    service: BaseService,
+    facade: ServiceFacade | ServiceWithSpecFacade,
+    *,
+    config: Mapping[str, Any] | None = None,
 ) -> None:
     """Bind the service to a service facade.
 
@@ -1754,6 +1769,9 @@ def bind_service(
     Args:
         service: The service instance to bind to the service facade.
         facade: The service facade to bind the service to.
+        config: The service configuration to update when binding the service.
+            It is used to override the default service configuration.
+            Defaults to ``None``.
     """
     # Validate owner
     owner = service.service_owner
@@ -1779,8 +1797,10 @@ def bind_service(
                 and spec not in getattr(facade, '__config_specs__', ()):
             facade._add_specs(spec)
 
-    # Bind service to the facade
+    # Bind service to the facade and update configuration
     object.__setattr__(service, 'service_owner', facade)
+    if config is not None:
+        service.service_config.update(config)
 
     # Call post bind hook
     service.__post_bind__(facade)
@@ -1880,69 +1900,85 @@ def unbind_service(service: BaseService) -> None:
             f"Service instance {service!r} is not bound to a service facade."
         )
 
-    # Unbind service from the facade
+    # Unbind service from the facade and reset configuration
     for name, method in service.service_methods.items():
         setattr(service, name, method)
     object.__setattr__(service, 'service_owner', None)
+    service.service_config = service.__config__.copy()
+
+
+def validate_service_method(
+    method: FunctionLenientType,
+    config: Mapping[str, Any],
+) -> bool:
+    """Validate a service method.
+
+    It validates a service method based on the provided configuration and
+    returns whether the method should be included or excluded.
+
+    Args:
+        method: The service method to validate.
+        config: The service configuration to use for method validation.
+
+    Returns:
+        Whether the service method should be included or excluded.
+    """
+    if not config:
+        return True
+
+    # Helper function to check whether the value matches the condition
+    def check_value(condition: Any, value: str) -> bool | None:
+        if condition is None:
+            return None
+        if isinstance(condition, str):
+            return value == condition
+        return value in condition
+
+    # Check method name
+    name = method.__name__
+    if 'include' in config and check_value(config['include'], name) is False:
+        return False
+    if 'exclude' in config and check_value(config['exclude'], name) is True:
+        return False
+
+    # Check method endpoint
+    if is_endpoint(method):
+        route = getattr(method, '__config_route__')
+        assert isinstance(route, APIRouteConfig)
+
+        # Check method mode
+        if 'include_mode' in config \
+                and check_value(config['include_mode'], route.mode) is False:
+            return False
+        if 'exclude_mode' in config \
+                and check_value(config['exclude_mode'], route.mode) is True:
+            return False
+
+        # Check method request
+        if route.mode == 'request':
+            assert route.methods is not None
+            if config.get('include_method', None) is not None and not any(
+                check_value(config['include_method'], m)
+                for m in route.methods
+            ):
+                return False
+            if config.get('exclude_method', None) is not None and any(
+                check_value(config['exclude_method'], m)
+                for m in route.methods
+            ):
+                return False
+
+    return True
 
 
 def _collect_service_methods(
     service: BaseService,
 ) -> dict[str, Callable[..., Any]]:
-    """Collect the public methods of the service.
-
-    It collects the public methods of the service class based on the service
-    configuration and returns them as a dictionary of method names and
-    callables.
-
-    Args:
-        config: The service configuration to use for method collection.
-
-    Returns:
-        A dictionary of public methods of the service.
-    """
-    config = service.service_config
+    """Collect the public methods of a service."""
+    config = service.service_config.entries()
     methods: dict[str, Callable[..., Any]] = {}
-
-    # Helper function to check whether the method should be collected
-    def check(method: FunctionLenientType) -> bool:
-        # Check method name
-        name = method.__name__
-        if config.include is not None and name not in config.include:
-            return False
-        if config.exclude is not None and name in config.exclude:
-            return False
-
-        # Check method endpoint
-        if is_endpoint(method):
-            route = getattr(method, '__config_route__')
-            assert isinstance(route, APIRouteConfig)
-
-            # Check method mode
-            if config.include_mode is not None \
-                    and route.mode not in config.include_mode:
-                return False
-            if config.exclude_mode is not None \
-                    and route.mode in config.exclude_mode:
-                return False
-
-            # Check method type
-            if route.mode == 'request':
-                assert route.methods is not None
-                if config.include_method is not None and not any(
-                    m in config.include_method for m in route.methods
-                ):
-                    return False
-                if config.exclude_method is not None and any(
-                    m in config.exclude_method for m in route.methods
-                ):
-                    return False
-
-        return True
-
-    # Collect methods based on the configuration
     for name, method in service.service_methods.items():
-        if check(method):
+        if validate_service_method(method, config):
             methods[name] = getattr(service, name)
     return methods
 

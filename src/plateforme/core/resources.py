@@ -72,12 +72,7 @@ from .api.routing import (
 )
 from .api.status import status
 from .api.utils import generate_unique_id, sort_key_for_routes
-from .config import (
-    ConfigDict,
-    Configurable,
-    ConfigurableMeta,
-    evaluate_config_field,
-)
+from .config import Configurable, ConfigurableMeta, evaluate_config_field
 from .context import CALLER_CONTEXT, SESSION_BULK_CONTEXT, VALIDATION_CONTEXT
 from .database.base import MissingGreenlet
 from .database.expressions import select
@@ -110,6 +105,7 @@ from .runtime import (
     Task,
 )
 from .schema import core as core_schema
+from .schema.aliases import AliasChoices
 from .schema.core import (
     CoreSchema,
     GetCoreSchemaHandler,
@@ -154,6 +150,7 @@ from .schema.types import TypeAdapterList
 from .selectors import BaseSelector, Key, KeyList
 from .services import (
     BaseService,
+    BaseServiceConfigDict,
     CRUDService,
     ServiceType,
     bind_service,
@@ -333,6 +330,11 @@ class ResourceConfigDict(BaseModelConfigDict, total=False):
     - ``unique``: Whether the index is unique. Defaults to ``True``.
     Defaults to an empty sequence."""
 
+    endpoints: BaseServiceConfigDict | None
+    """A base configuration for the resource service endpoints that allows to
+    select specific endpoint methods to include or exclude from the services,
+    and configure their default behavior. Defaults to ``None``."""
+
     services: Sequence[BaseService | EllipsisType | ServiceType]
     """A sequence of services to bind to the resource. The services are used to
     define the business logic and data access methods for the resource. The
@@ -439,6 +441,11 @@ class ResourceConfig(ModelConfig):
     - ``unique``: Whether the index is unique. Defaults to ``True``.
     Defaults to an empty tuple.
     """
+
+    endpoints: BaseServiceConfigDict | None = None
+    """A base configuration for the resource service endpoints that allows to
+    select specific endpoint methods to include or exclude from the services,
+    and configure their default behavior. Defaults to ``None``."""
 
     services: tuple[BaseService | EllipsisType | ServiceType, ...] = ()
     """A tuple of services to bind to the resource. The services are used to
@@ -2400,7 +2407,7 @@ def _init_specs_and_services(
 class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
     """Meta class for the base resource class."""
     if typing.TYPE_CHECKING:
-        __config__: ResourceConfig | ConfigDict[ResourceConfigDict]
+        __config__: ResourceConfig | ResourceConfigDict
         __config_services__: tuple[BaseService, ...]
         __config_specs__: tuple[SpecType, ...]
         __tablename__: str | None
@@ -2596,7 +2603,7 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
                     code='services-already-bound',
                 )
             # Bind service to resource
-            bind_service(service, cls)
+            bind_service(service, cls, config=cls.resource_config.endpoints)
             # Add service to resource
             cls.__config_services__ += (service,)
             # Add service wrapped methods to resource manager
@@ -2839,7 +2846,10 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
         root_path: ResourcePath = cls._create_path()
         for path in root_path.walk(max_depth=max_depth):
             # Retrieve target resource endpoint methods
-            methods = path.target.objects._collect_methods(scope='endpoint')
+            methods = path.target.objects._collect_methods(
+                scope='endpoint',
+                config=cls.resource_config.endpoints,
+            )
             for method in methods.values():
                 if endpoint := _create_resource_endpoint(
                     path, method, max_selection=max_selection
@@ -3262,7 +3272,7 @@ class BaseResource(
             attributes set on the resource model instance.
     """
     if typing.TYPE_CHECKING:
-        __config__: ClassVar[ResourceConfig | ConfigDict[ResourceConfigDict]]
+        __config__: ClassVar[ResourceConfig | ResourceConfigDict]
         __config_services__: ClassVar[tuple[BaseService, ...]]
         __config_specs__: ClassVar[tuple[SpecType, ...]]
         __pydantic_adapter__: ClassVar[TypeAdapterList['BaseResource']]
@@ -3318,6 +3328,7 @@ class BaseResource(
         default=Deferred,
         validate_default=False,
         alias='type',
+        validation_alias=AliasChoices('type', 'type_'),
         title='Type',
         description='Resource type',
         init=False,
@@ -4627,7 +4638,7 @@ class CRUDResource(BaseResource):
     resource instances.
     """
     if typing.TYPE_CHECKING:
-        __config__: ClassVar[ResourceConfig | ConfigDict[ResourceConfigDict]]
+        __config__: ClassVar[ResourceConfig | ResourceConfigDict]
 
     __abstract__ = True
     __config__ = ResourceConfig(services=(CRUDService,))
