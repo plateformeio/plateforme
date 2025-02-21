@@ -672,6 +672,15 @@ class ModelMeta(ConfigurableMeta, _ModelMeta):
                 or 'pydantic' in kwargs_config[key].metadata
         }
 
+        # It is necessary to ensure that the owner and resource are sets to
+        # their default values when the model is first created to avoid
+        # conflicts with the schema generation and validation.
+        namespace = {
+            **namespace,
+            '__pydantic_owner__': 'model',
+            '__pydantic_resource__': None,
+        }
+
         cls = super().__new__(
             mcls,
             name,
