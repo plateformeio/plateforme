@@ -21,8 +21,9 @@ from . import runtime
 from .api.base import APIManager
 from .api.exceptions import EXCEPTION_HANDLERS
 from .api.middleware import BulkMiddleware, Middleware
-from .api.routing import APIBaseRouterConfigDict, BaseRoute
+from .api.routing import APIBaseRouterConfigDict
 from .api.types import Receive, Scope, Send
+from .api.utils import sort_key_for_routes
 from .context import PLATEFORME_CONTEXT
 from .database.base import DatabaseManager
 from .database.orm import Registry
@@ -1229,10 +1230,7 @@ class Plateforme(EventEmitter, metaclass=PlateformeMeta):
 
     def _sort_api_routes(self) -> None:
         """Sort the API routes based on the route path."""
-        def sort_key(route: BaseRoute) -> str:
-            path = getattr(route, 'path', '')
-            return path + '/~'
-        self.api.router.routes = sorted(self.api.routes, key=sort_key)
+        self.api.router.routes.sort(key=sort_key_for_routes)
 
     def _validate_namespace_names(
         self,

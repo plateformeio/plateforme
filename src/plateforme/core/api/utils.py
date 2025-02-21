@@ -152,5 +152,7 @@ def parse_unique_id(id: str) -> tuple[
 
 def sort_key_for_routes(route: 'BaseRoute') -> tuple[bool, str]:
     """Get the sort key for the given route."""
-    path_format = getattr(route, 'path', None)
-    return path_format is None, path_format or ''
+    path = getattr(route, 'path', None)
+    path_flag = path is None
+    path_key = (path or '') + '/~'
+    return path_flag, path_key
