@@ -18,13 +18,11 @@ from typing import Any, Literal, Protocol, Self, Type, TypeVar
 from .errors import PlateformeError
 from .functions import with_caller_context
 from .patterns import to_name_case
-from .schema.fields import ComputedFieldInfo
+from .schema.fields import ComputedFieldInfo, FieldDefinition, FieldLookup
 from .schema.json import GenerateJsonSchema, JsonSchemaMode, JsonSchemaSource
 from .schema.models import (
     BaseModel,
     DiscriminatedModelType,
-    ModelFieldInfo,
-    ModelFieldLookup,
     ModelType,
     collect_models,
 )
@@ -87,8 +85,8 @@ class SpecFacade(Protocol):
         __module__: str | None = None,
         __validators__: dict[str, ClassMethodType] | None = None,
         __cls_kwargs__: dict[str, Any] | None = None,
-        __collect__: tuple[ModelFieldLookup, ...] | None = None,
-        **field_definitions: tuple[type[Any], Any | ModelFieldInfo],
+        __collect__: tuple[FieldLookup, ...] | None = None,
+        **field_definitions: FieldDefinition,
     ) -> None:
         """Register a schema within the facade.
 
@@ -393,6 +391,7 @@ class CRUDSpec(BaseSpec):
             'Read',
             __collect__=(
                 {
+                    'computed': True,
                     'exclude': {
                         'exclude': True,
                         'is_eagerly': False,

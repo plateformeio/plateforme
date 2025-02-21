@@ -51,6 +51,7 @@ import inspect
 import re
 import typing
 from collections.abc import Iterable
+from copy import copy
 from types import NoneType, UnionType
 from typing import (
     AbstractSet,
@@ -81,6 +82,7 @@ from ..database.schema import Column
 from ..database.types import BaseTypeEngine, TypeEngine
 from ..deprecated import Deprecated
 from ..errors import PlateformeError
+from ..expressions import IncExPredicate
 from ..modules import resolve_forwardref_fullname
 from ..patterns import RegexPattern, to_name_case, to_path_case, to_title_case
 from ..representations import PlainRepresentation, ReprArgs, Representation
@@ -120,13 +122,19 @@ __all__ = (
     'ComputedFieldInfo',
     'ConfigField',
     'Field',
+    'FieldDefinition',
     'FieldInfo',
     'FieldInfoDict',
     'FieldInfoMeta',
+    'FieldLookup',
     'BackrefFieldInfoDict',
     'PrivateAttr',
     'computed_field',
 )
+
+
+FieldDefinition = tuple[type[Any], 'Any | FieldInfo[Any]']
+"""A type alias for a field definition."""
 
 
 # MARK: Field Configuration
@@ -828,6 +836,7 @@ class FieldInfo(
     if typing.TYPE_CHECKING:
         __attributes__: ClassVar[set[str]]
 
+    # Internal
     _attributes_set: dict[str, Any]
     _complete: bool
     # Source field information
@@ -2244,6 +2253,15 @@ class FieldInfo(
                 code='field-invalid-config',
             )
 
+    def _create_field_definition(self) -> FieldDefinition:
+        """Create a field definition from the field information."""
+        # Retrieve annotation from field information
+        annotation = typing.cast(type, copy(self.annotation))
+        # Retrieve raw field information
+        field = copy(self)
+        field._update(annotation=None, owner=Undefined, name=Undefined)
+        return annotation, field
+
     def _default(self, **kwargs: Unpack[FieldInfoDict[Any]]) -> None:
         """Update default and set the field information.
 
@@ -2444,13 +2462,13 @@ class ComputedFieldInfo(_ComputedFieldInfo):
         json_schema_extra: Dictionary or callable to provide extra JSON schema
             properties. Defaults to ``None``.
     """
-
     decorator_repr: ClassVar[str] = '@computed_field'
+
     # Source computed field information
     wrapped_property: property
     name: str
-    return_type: Any
     # Computed field information
+    return_type: Any
     alias: str
     alias_priority: int | None
     slug: str
@@ -2460,6 +2478,39 @@ class ComputedFieldInfo(_ComputedFieldInfo):
     deprecated: Deprecated | str | bool | None
     repr: bool
     json_schema_extra: JsonSchemaDict | Callable[[JsonSchemaDict], None] | None
+
+    def _create_field_definition(self) -> FieldDefinition:
+        """Create a field definition from the computed field information."""
+        # Retrieve annotation from field information or property getter
+        if self.return_type is not Undefined:
+            annotation = self.return_type
+        else:
+            prop_func = getattr(self.wrapped_property, 'fget', None)
+            prop_annotations = getattr(prop_func, '__annotations__', {})
+            annotation = prop_annotations.get('return', None)
+            if annotation is None:
+                raise PlateformeError(
+                    f"Cannot create field definition for computed field "
+                    f"{self.name!r}. The wrapped property must have a getter "
+                    f"function with a return type annotation.",
+                    code='field-invalid-config',
+                )
+
+        # Retrieve raw field information from computed field attributes
+        field = Field(
+            ...,
+            alias=self.alias,
+            alias_priority=self.alias_priority,
+            slug=self.slug,
+            title=self.title,
+            description=self.description,
+            examples=self.examples,
+            deprecated=self.deprecated,
+            repr=self.repr,
+            json_schema_extra=self.json_schema_extra,
+        )
+
+        return annotation, field
 
 
 @typing.overload
@@ -2729,6 +2780,45 @@ def computed_field(
 
 
 # MARK: Utilities
+
+class FieldLookup(TypedDict, total=False):
+    """A model field lookup configuration."""
+
+    computed: bool | None
+    """Whether to include computed fields in the lookup configuration. When
+    set to ``True``, field definitions for computed fields are included in the
+    lookup configuration. Defaults to ``None``."""
+
+    include: dict[str, IncExPredicate] | None
+    """The filters for including specific fields as a dictionary with the field
+    attribute names as keys and the values to match. Specified keys can use
+    the ``.`` notation to access nested attributes. Additionally, the lookup
+    attributes can be callables without arguments. Defaults to ``None``."""
+
+    exclude: dict[str, IncExPredicate] | None
+    """The filters for excluding specific fields as a dictionary with the field
+    attribute names as keys and the values to not match. Specified keys can use
+    the ``.`` notation to access nested attributes. Additionally, the lookup
+    attributes can be callable without arguments. Defaults to ``None``."""
+
+    partial: bool | None
+    """Whether to mark the field annotations as optional.
+    Defaults to ``None``."""
+
+    default: dict[str, Any] | None
+    """The default to apply and set within the field information.
+    Defaults to ``None``."""
+
+    update: dict[str, Any] | None
+    """The update to apply and set within the field information.
+    Defaults to ``None``."""
+
+    override: 'FieldLookup | None'
+    """The field lookup configuration to override the current configuration.
+    This can be used to narrow down the field lookup configuration to specific
+    fields. Multiple levels of nested configurations can be provided and will
+    be resolved recursively. Defaults to ``None``."""
+
 
 def _resolve_target_from_annotation(
     owner: Any,

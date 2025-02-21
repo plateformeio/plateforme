@@ -119,7 +119,9 @@ from .schema.fields import (
     ComputedFieldInfo,
     ConfigField,
     Field,
+    FieldDefinition,
     FieldInfo,
+    FieldLookup,
     PrivateAttr,
 )
 from .schema.json import (
@@ -136,7 +138,6 @@ from .schema.models import (
     DiscriminatedModelType,
     ModelConfig,
     ModelFieldInfo,
-    ModelFieldLookup,
     ModelMeta,
     ModelType,
     NoInitField,
@@ -2205,8 +2206,8 @@ def _create_schema_base_model(
     __module__: str | None = None,
     __validators__: dict[str, ClassMethodType] | None = None,
     __cls_kwargs__: dict[str, Any] | None = None,
-    __collect__: tuple[ModelFieldLookup, ...] | None = None,
-    **field_definitions: tuple[type[Any], Any | ModelFieldInfo],
+    __collect__: tuple[FieldLookup, ...] | None = None,
+    **field_definitions: FieldDefinition,
 ) -> None:
     """Create a new resource schema base model.
 
@@ -2753,7 +2754,7 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
                     cls.resource_schemas.pop(name)
 
     def _collect_fields(
-        cls, **lookup: Unpack[ModelFieldLookup]
+        cls, **lookup: Unpack[FieldLookup]
     ) -> dict[str, tuple[type[Any], ModelFieldInfo]]:
         """Collect the resource model field definitions.
 
@@ -2998,8 +2999,8 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
         __module__: str | None = None,
         __validators__: dict[str, ClassMethodType] | None = None,
         __cls_kwargs__: dict[str, Any] | None = None,
-        __collect__: tuple[ModelFieldLookup, ...] | None = None,
-        **field_definitions: tuple[type[Any], Any | ModelFieldInfo],
+        __collect__: tuple[FieldLookup, ...] | None = None,
+        **field_definitions: FieldDefinition,
     ) -> None:
         """Register a resource schema within the resource class.
 
@@ -3499,7 +3500,13 @@ class BaseResource(
         # Pydantic validation logic.
         if validation_mode != ValidationMode.DISABLED:
             # Merge initial dictionary with data
-            model_dict = { **model.model_dump(exclude_unset=True), **data }
+            model_dict = {
+                **model.model_dump(
+                    exclude=set(model.model_computed_fields),
+                    exclude_unset=True,
+                ),
+                **data,
+            }
             strict = True if validation_mode == ValidationMode.STRICT \
                 else False
             try:

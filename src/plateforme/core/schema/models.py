@@ -116,7 +116,9 @@ from .fields import (
     ComputedFieldInfo,
     ConfigField,
     Field,
+    FieldDefinition,
     FieldInfo,
+    FieldLookup,
     PrivateAttr,
 )
 from .json import (
@@ -153,7 +155,6 @@ __all__ = (
     'ModelConfigDict',
     'ModelMeta',
     'ModelFieldInfo',
-    'ModelFieldLookup',
     'ModelType',
     'NoInitField',
     'RootModel',
@@ -1734,7 +1735,7 @@ def create_model(
     __module__: str = __name__,
     __validators__: dict[str, ClassMethodType] | None = None,
     __cls_kwargs__: dict[str, Any] | None = None,
-    **field_definitions: tuple[type[Any], Any | ModelFieldInfo],
+    **field_definitions: FieldDefinition,
 ) -> ModelType:
     ...
 
@@ -1748,7 +1749,7 @@ def create_model(
     __module__: str = __name__,
     __validators__: dict[str, ClassMethodType] | None = None,
     __cls_kwargs__: dict[str, Any] | None = None,
-    **field_definitions: tuple[type[Any], Any | ModelFieldInfo],
+    **field_definitions: FieldDefinition,
 ) -> type[Model]:
     ...
 
@@ -1761,7 +1762,7 @@ def create_model(
     __module__: str | None = None,
     __validators__: dict[str, ClassMethodType] | None = None,
     __cls_kwargs__: dict[str, Any] | None = None,
-    **field_definitions: tuple[type[Any], Any | ModelFieldInfo],
+    **field_definitions: FieldDefinition,
 ) -> type[Model]:
     """Dynamically creates and returns a new model class.
 
@@ -2645,43 +2646,9 @@ def create_discriminated_model(
 
 # MARK: Utilities
 
-class ModelFieldLookup(TypedDict, total=False):
-    """A model field lookup configuration."""
-
-    include: dict[str, IncExPredicate] | None
-    """The filters for including specific fields as a dictionary with the field
-    attribute names as keys and the values to match. Specified keys can use
-    the ``.`` notation to access nested attributes. Additionally, the lookup
-    attributes can be callables without arguments. Defaults to ``None``."""
-
-    exclude: dict[str, IncExPredicate] | None
-    """The filters for excluding specific fields as a dictionary with the field
-    attribute names as keys and the values to not match. Specified keys can use
-    the ``.`` notation to access nested attributes. Additionally, the lookup
-    attributes can be callable without arguments. Defaults to ``None``."""
-
-    partial: bool | None
-    """Whether to mark the field annotations as optional.
-    Defaults to ``None``."""
-
-    default: dict[str, Any] | None
-    """The default to apply and set within the field information.
-    Defaults to ``None``."""
-
-    update: dict[str, Any] | None
-    """The update to apply and set within the field information.
-    Defaults to ``None``."""
-
-    override: 'ModelFieldLookup | None'
-    """The field lookup configuration to override the current configuration.
-    This can be used to narrow down the field lookup configuration to specific
-    fields. Multiple levels of nested configurations can be provided and will
-    be resolved recursively. Defaults to ``None``."""
-
-
 def collect_fields(
-    __model: ModelType, **kwargs: Unpack[ModelFieldLookup],
-) -> dict[str, tuple[type, ModelFieldInfo]]:
+    __model: ModelType, **kwargs: Unpack[FieldLookup],
+) -> dict[str, FieldDefinition]:
     """Collect the model field definitions from the provided model.
 
     It collects the model fields based on the provided model and keyword
@@ -2694,6 +2661,9 @@ def collect_fields(
     Args:
         __model: The model class to collect the fields from.
         **kwargs: The field lookup configuration to collect the fields.
+            - `computed`: Whether to include computed fields. When set to
+                ``True``, field definitions for computed fields are included.
+                Defaults to ``None``.
             - `include`: The filters to include specific fields based on the
                 field attributes as a dictionary with the field attribute names
                 as keys and the predicates to include as values.
@@ -2718,14 +2688,19 @@ def collect_fields(
         A dictionary of field names with the corresponding field annotations
         and field information.
     """
-    field_definitions: dict[str, tuple[type, ModelFieldInfo]] = {}
+    field_definitions: dict[str, FieldDefinition] = {}
 
     if issubclass(__model, DiscriminatedModel):
         __model = __model.get_root_base()
 
+    model_fields: dict[str, ComputedFieldInfo | ModelFieldInfo] = {
+        **__model.model_fields,
+        **__model.model_computed_fields,
+    }
+
     # Helper function to check if a field should be included or excluded
     def check(
-        field: ModelFieldInfo,
+        field: ComputedFieldInfo | ModelFieldInfo,
         key: str,
         predicate: IncExPredicate,
     ) -> bool:
@@ -2768,10 +2743,8 @@ def collect_fields(
         )
 
     # Recursive function to process field lookup configuration
-    def process_fields(
-        lookup: ModelFieldLookup,
-        *field_names: str,
-    ) -> None:
+    def process_fields(lookup: FieldLookup, *field_names: str) -> None:
+        computed = lookup.get('computed', None)
         include = lookup.get('include', None)
         exclude = lookup.get('exclude', None)
         partial = lookup.get('partial', None)
@@ -2782,51 +2755,48 @@ def collect_fields(
         check_names: set[str] = set()
 
         for field_name in field_names:
-            model_field = __model.model_fields[field_name]
+            model_field = model_fields[field_name]
 
-            # Check if field should be included or excluded
-            check_include = include is None or all(
+            # Skip computed fields if not requested
+            if isinstance(model_field, ComputedFieldInfo) and not computed:
+                continue
+
+            # Skip fields if not matching include or exclude filters
+            if include is not None and not all(
                 check(model_field, k, v) for k, v in include.items()
-            )
-            check_exclude = exclude is not None and any(
+            ):
+                continue
+            if exclude is not None and any(
                 check(model_field, k, v) for k, v in exclude.items()
-            )
+            ):
+                continue
 
-            # Process field if it should be included
-            if check_include and not check_exclude:
-                check_names.add(field_name)
+            # Retrieve field definition
+            if field_name not in field_definitions:
+                annotation, field = model_field._create_field_definition()
+            else:
+                annotation, field = field_definitions[field_name]
 
-                # Retrieve field definition
-                if field_name not in field_definitions:
-                    annotation = \
-                        typing.cast(type, copy(model_field.annotation))
-                    field = copy(model_field)
-                    field._update(
-                        annotation=None,
-                        owner=Undefined,
-                        name=Undefined,
-                    )
-                else:
-                    annotation, field = field_definitions[field_name]
+            # Update field definition
+            if default:
+                field._default(**default)
+            if update:
+                field._update(**update)
+            if partial is True:
+                annotation = Optional[annotation]  # type: ignore
+                if field.default is Undefined \
+                        and field.default_factory is None:
+                    field._update(default=None)
 
-                # Update field definition
-                if default:
-                    field._default(**default)
-                if update:
-                    field._update(**update)
-                if partial is True:
-                    annotation = Optional[annotation]  # type: ignore
-                    if field.default is Undefined \
-                            and field.default_factory is None:
-                        field._update(default=None)
+            field_definitions[field_name] = (annotation, field)
 
-                field_definitions[field_name] = (annotation, field)
+            check_names.add(field_name)
 
         # Process nested field lookup configuration
         if check_names and override is not None:
             process_fields(override, *check_names)
 
-    process_fields(kwargs, *__model.model_fields.keys())
+    process_fields(kwargs, *model_fields.keys())
 
     return field_definitions
 
