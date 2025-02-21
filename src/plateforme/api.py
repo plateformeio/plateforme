@@ -58,6 +58,8 @@ from .core.api.routing import (
 )
 from .core.api.status import status
 from .core.api.websockets import WebSocket, WebSocketDisconnect
+from .core.expressions import Condition, Filter, Ordering, Sort
+from .core.selectors import BaseSelector, Key, KeyList
 
 __all__ = (
     # Background
@@ -78,6 +80,11 @@ __all__ = (
     # Exceptions
     'HTTPException',
     'WebSocketException',
+    # Expressions
+    'Condition',
+    'Filter',
+    'Ordering',
+    'Sort',
     # Parameters
     'Body',
     'Cookie',
@@ -108,6 +115,10 @@ __all__ = (
     'APIRouteDecorator',
     'APIRouter',
     'route',
+    # Selectors
+    'BaseSelector',
+    'Key',
+    'KeyList',
     # Status
     'status',
     # Websockets

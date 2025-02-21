@@ -14,7 +14,6 @@ application development.
 """
 
 from .core.config import ConfigDict, with_config
-from .core.expressions import Condition, Filter, Ordering, Sort
 from .core.mixins import Archivable, Auditable, Encrypted
 from .core.resources import (
     BaseResource,
@@ -23,7 +22,6 @@ from .core.resources import (
     ResourceIndex,
 )
 from .core.schema.fields import Field, PrivateAttr, computed_field
-from .core.selectors import BaseSelector, Key, KeyList
 from .core.services import (
     BaseService,
     BaseServiceWithSpec,
@@ -33,11 +31,6 @@ from .core.services import (
 from .core.specs import BaseSpec, CRUDSpec
 
 __all__ = (
-    # Expressions
-    'Condition',
-    'Filter',
-    'Ordering',
-    'Sort',
     # Fields
     'Field',
     'PrivateAttr',
@@ -51,10 +44,6 @@ __all__ = (
     'CRUDResource',
     'ResourceConfig',
     'ResourceIndex',
-    # Selectors
-    'BaseSelector',
-    'Key',
-    'KeyList',
     # Services
     'BaseService',
     'BaseServiceWithSpec',
