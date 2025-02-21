@@ -61,8 +61,6 @@ if typing.TYPE_CHECKING:
     from .schema.models import ModelConfigDict, ModelType
     from .services import ServiceConfigDict, ServiceType
 
-_T = TypeVar('_T')
-
 PROTECTED_ATTRS = (
     r'check',
     r'clear',
@@ -432,13 +430,42 @@ class ConfigWrapperMeta(type):
 # MARK: Configuration Wrapper
 
 class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
-    """A base configuration wrapper class."""
+    """A base configuration wrapper class.
+
+    A configuration wrapper class is a class that wraps a configuration
+    dictionary and provides a set of configuration fields that can be used to
+    define the structure of the configuration dictionary. The configuration
+    fields are used to validate the configuration dictionary and to provide
+    default values for the configuration keys.
+
+    The configuration wrapper class is typically used as a base class for
+    configuration classes that define the configuration structure for models,
+    resources, services, and other components in the Plateforme framework.
+
+    Attributes:
+        __config_fields__: A dictionary containing the configuration fields
+            information for the configuration wrapper class.
+        __config_mutable__: A flag indicating whether the configuration
+            instance is mutable, i.e., whether owner class instances
+            configurations can be modified. Defaults to ``False``.
+        __config_parent_namespace__: The parent namespace of the configuration
+            wrapper class. It is used to retrieve the type hints and
+            annotations of the configuration wrapper class.
+            Defaults to ``None``.
+        __config_sources__: A tuple containing the configuration dictionary
+            sources used to collect the configuration fields for the
+            configuration wrapper class. Defaults to an empty tuple.
+        __config_validators__: A dictionary containing the type validators for
+            the configuration fields of the configuration wrapper class.
+    """
     if typing.TYPE_CHECKING:
         __config_fields__: ClassVar[dict[str, ConfigFieldInfo]]
+        __config_mutable__: ClassVar[bool]
         __config_parent_namespace__: ClassVar[dict[str, Any] | None]
         __config_sources__: ClassVar[tuple[ConfigSource, ...]]
         __config_validators__: ClassVar[dict[str, TypeAdapter[Any]]]
     else:
+        __config_mutable__ = False
         __config_parent_namespace__ = None
         __config_sources__ = ()
 
@@ -486,6 +513,7 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
 
     def __get__(self, instance: Any, owner: Any) -> Self:
         """Set the configuration wrapper owner if not already set."""
+        # Setup configuration owner
         if self.__config_owner__ is None:
             self.__config_owner__ = owner
         elif self.__config_owner__ is not owner:
@@ -494,16 +522,37 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
                 f"cannot be accessed from a different owner. It is owned by "
                 f"{self.__config_owner__!r}."
             )
+        # Handle mutable configuration instances
+        if instance is not None and self.__config_mutable__:
+            config_attr = getattr(owner, '__config_attr__', None)
+            if config_attr is not None:
+                assert isinstance(instance, object)
+                return instance.__dict__.get(config_attr, self)  # type: ignore
         return self
 
     def __set__(self, instance: Any, value: Any) -> None:
-        raise AttributeError(
-            f"Configuration instance {self.__class__.__qualname__!r} cannot "
-            f"be set to an instance attribute. Either set the new "
-            f"configuration instance as a class attribute of "
-            f"{instance.__class__.__qualname__!r} or use the `update` method "
-            f"to modify the configuration."
-        )
+        # Handle mutable configuration instances
+        if not self.__config_mutable__:
+            raise AttributeError(
+                f"Configuration instance {self.__class__.__qualname__!r} "
+                f"cannot be set to an instance attribute as it is immutable."
+            )
+        if self.__config_owner__ is None \
+                or not hasattr(self.__config_owner__, '__config_attr__'):
+            raise AttributeError(
+                f"Configuration instance {self.__class__.__qualname__!r} "
+                f"cannot be set as an instance attribute. The instance must "
+                f"be a valid configurable owner with a defined configuration "
+                f"attribute. Got: {instance.__class__!r}."
+            )
+        if not isinstance(instance, self.__config_owner__):
+            raise AttributeError(
+                f"Configuration instance {self.__class__.__qualname__!r} "
+                f"cannot be set to a different owner class. Got: "
+                f"{instance.__class__!r} instead of {self.__config_owner__!r}."
+            )
+        config_attr = getattr(self.__config_owner__, '__config_attr__')
+        instance.__dict__[config_attr] = value
 
     def __delete__(self, instance: Any) -> None:
         raise AttributeError(
@@ -1389,9 +1438,19 @@ class ConfigurableMeta(type):
 # MARK: Configurable
 
 class Configurable(Generic[Config], metaclass=ConfigurableMeta):
-    """A base configurable class."""
+    """A base configurable class.
+
+    A base class that provides a configuration wrapper to manage the
+    configuration of the class and its subclasses.
+
+    Attributes:
+        __config__: The configuration instance for the configurable class.
+        __config_attr__: The configurable attribute name used to extract the
+            configuration dictionary from the bases and the namespace of the
+            configurable class.
+    """
     if typing.TYPE_CHECKING:
-        __config__: ClassVar[ConfigWrapper | dict[str, Any]]
+        __config__: ClassVar[ConfigWrapper | Mapping[str, Any]]
         __config_attr__: ClassVar[str]
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
@@ -1401,43 +1460,46 @@ class Configurable(Generic[Config], metaclass=ConfigurableMeta):
             raise TypeError(
                 "A base configurable class cannot be directly instantiated."
             )
-        return super().__new__(cls)
+        self = super().__new__(cls)
+
+        # Handle mutable configuration instances
+        config: ConfigWrapper = getattr(cls, '__config__')
+        if config.__config_mutable__:
+            config = config.copy()
+            config_attr = getattr(cls, '__config_attr__')
+            object.__setattr__(self, config_attr, config)
+
+        return self
 
 
 # MARK: Configuration Dictionary
 
-class ConfigDict(dict[str, Any], Generic[_T]):
+@typing.overload
+def ConfigDict(
+    type_: Literal['resource'] = 'resource',
+    **kwargs: Unpack['ResourceConfigDict'],
+) -> 'ResourceConfigDict':
+    ...
 
-    @typing.overload
-    def __new__(  # type: ignore[overload-overlap, unused-ignore]
-        cls,
-        type_: Literal['resource'] = 'resource',
-        **kwargs: Unpack['ResourceConfigDict'],
-    ) -> 'ConfigDict[ResourceConfigDict]':
-        ...
+@typing.overload
+def ConfigDict(
+    type_: Literal['model'],
+    **kwargs: Unpack['ModelConfigDict'],
+) -> 'ModelConfigDict':
+    ...
 
-    @typing.overload
-    def __new__(  # type: ignore[overload-overlap, unused-ignore]
-        cls,
-        type_: Literal['model'] = 'model',
-        **kwargs: Unpack['ModelConfigDict'],
-    ) -> 'ConfigDict[ModelConfigDict]':
-        ...
+@typing.overload
+def ConfigDict(
+    type_: Literal['service'],
+    **kwargs: Unpack['ServiceConfigDict'],
+) -> 'ServiceConfigDict':
+    ...
 
-    @typing.overload
-    def __new__(  # type: ignore[overload-overlap, unused-ignore]
-        cls,
-        type_: Literal['service'] = 'service',
-        **kwargs: Unpack['ServiceConfigDict'],
-    ) -> 'ConfigDict[ServiceConfigDict]':
-        ...
-
-    def __new__(  # type: ignore
-        cls,
-        type_: Literal['model', 'resource', 'service'] = 'resource',
-        **kwargs: Any,
-    ) -> 'ConfigDict[_T]':
-        return kwargs  # type: ignore
+def ConfigDict(
+    type_: Literal['resource', 'model', 'service'] = 'resource',
+    **kwargs: Any,
+) -> 'ResourceConfigDict | ModelConfigDict | ServiceConfigDict':
+    return kwargs  # type: ignore
 
 
 # MARK: Utilities
