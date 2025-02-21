@@ -3322,7 +3322,7 @@ class BaseResource(
         default=Deferred,
         validate_default=False,
         title='ID',
-        description='Resource ID',
+        description='Resource identifier',
         frozen=True,
     )
     type_: str = Field(
@@ -3331,7 +3331,7 @@ class BaseResource(
         alias='type',
         validation_alias=AliasChoices('type', 'type_'),
         title='Type',
-        description='Resource type',
+        description='Resource polymorphic type',
         init=False,
         frozen=True,
     )
