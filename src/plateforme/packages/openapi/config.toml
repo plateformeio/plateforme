@@ -1,8 +1,0 @@
-[plateforme]
-name = "openapi"
-description = "The Plateforme Open API package."
-dynamic = ["author", "licence", "version"]
-keywords = ["plateforme", "package", "openapi"]
-
-[plateforme.package]
-namespace = "openapi"

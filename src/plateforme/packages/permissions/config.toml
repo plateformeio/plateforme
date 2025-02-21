@@ -1,0 +1,8 @@
+[plateforme]
+name = "permissions"
+description = "The Plateforme permissions package."
+dynamic = ["author", "licence", "version"]
+keywords = ["plateforme", "package", "permissions"]
+
+[plateforme.package]
+namespace = "permissions"
