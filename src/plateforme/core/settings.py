@@ -835,6 +835,7 @@ class LoggingCustomFormatterSettings(BaseModel):
     @classmethod
     def __validator__(cls, obj: Any) -> Any:
         if isinstance(obj, dict):
+            # Handle extra parameters
             extra = obj.pop('extra', {})
             obj.update(extra)
         return obj
@@ -1425,6 +1426,7 @@ class LoggingCustomHandlerSettings(BaseModel):
     @classmethod
     def __validator__(cls, obj: Any) -> Any:
         if isinstance(obj, dict):
+            # Handle extra parameters
             extra = obj.pop('extra', {})
             obj.update(extra)
         return obj
@@ -1436,8 +1438,8 @@ class LoggingFileHandlerSettingsDict(TypedDict, total=False):
     """Plateforme logging file handler settings dictionary."""
 
     type: Required[Literal['file']]
-    """The type of the handler set as ``'file'`` and used to discriminate between
-    different handler types."""
+    """The type of the handler set as ``'file'`` and used to discriminate
+    between different handler types."""
 
     level: Literal[
         'DEBUG',
@@ -1459,8 +1461,9 @@ class LoggingFileHandlerSettingsDict(TypedDict, total=False):
 
     filename: str | None
     """The filename to use for the handler. If not provided, the handler will
-    use the default filename ``'plateforme.log'``, or ``'plateforme.jsonl'`` if
-    the JSON formatter is used. Defaults to ``None``."""
+    use the default filename ``'logs/plateforme.log'``, or
+    ``'logs/plateforme.jsonl'`` if the JSON formatter is used.
+    Defaults to ``None``."""
 
     max_bytes: int
     """The maximum number of bytes to store in the log file before rotating the
@@ -1522,9 +1525,9 @@ class LoggingFileHandlerSettings(BaseModel):
         default=None,
         title='Filename',
         description="""The filename to use for the handler. If not provided,
-            the handler will use the default filename `'plateforme.log'`, or
-            `'plateforme.jsonl'` if the JSON formatter is used.""",
-        examples=['plateforme.log', 'plateforme.jsonl'],
+            the handler will use the default filename `'logs/plateforme.log'`,
+            or `'logs/plateforme.jsonl'` if the JSON formatter is used.""",
+        examples=['my_app_errors.log', 'my_app.jsonl'],
     )
 
     max_bytes: int = Field(
@@ -1549,9 +1552,9 @@ class LoggingFileHandlerSettings(BaseModel):
         assert isinstance(obj, cls)
         if obj.filename is None:
             if obj.formatter == 'json':
-                obj.filename = 'plateforme.jsonl'
+                obj.__dict__['filename'] = 'logs/plateforme.jsonl'
             else:
-                obj.filename = 'plateforme.log'
+                obj.__dict__['filename'] = 'logs/plateforme.log'
         return obj
 
 
@@ -1585,6 +1588,7 @@ class LoggingStreamHandlerSettingsDict(TypedDict, total=False):
     stream: str
     """The stream to use for the handler.
     Defaults to ``'ext://sys.stdout'``."""
+
 
 class LoggingStreamHandlerSettings(BaseModel):
     """Plateforme logging stream handler settings."""

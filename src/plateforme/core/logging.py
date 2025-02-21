@@ -14,12 +14,12 @@ as well as the specific formatters and filters used by the framework.
 import atexit
 import json
 import logging
+import logging.handlers
 import os
 import sys
 import typing
 from datetime import datetime, timezone
 from enum import StrEnum
-from logging import _handlers  # type: ignore
 from logging.config import dictConfig as buildConfig
 from logging.handlers import QueueHandler, QueueListener
 from queue import Queue
@@ -33,69 +33,26 @@ if typing.TYPE_CHECKING:
     from .settings import LoggingSettings
 
 __all__ = (
+    'logger'
+    'setup_logging',
+    # Filters
+    'NoErrorFilter',
+    # Formatters
+    'DefaultFormatter',
+    'JsonFormatter',
+    # Handlers
+    'FileHandler',
+    'StreamHandler',
+    # Utilities
     'COLOR_MAP',
     'LOG_RECORD_MAP',
     'Color',
-    'DefaultFormatter',
-    'JsonFormatter',
-    'NoErrorFilter',
-    'logger'
-    'setup_logging',
     'supports_ansi_colors',
 )
 
 
 logger = logging.getLogger('plateforme')
 """The main logger of the Plateforme framework."""
-
-
-class Color(StrEnum):
-    """An enumeration of ANSI color codes for log levels."""
-    RESET = '\033[0m'
-    CYAN = '\033[36m'
-    GREEN = '\033[32m'
-    YELLOW = '\033[33m'
-    RED = '\033[31m'
-    MAGENTA = '\033[35m'
-
-
-COLOR_MAP = {
-    'DEBUG': Color.CYAN,
-    'INFO': Color.GREEN,
-    'WARNING': Color.YELLOW,
-    'ERROR': Color.RED,
-    'CRITICAL': Color.MAGENTA,
-}
-"""The color map for log levels."""
-
-
-LOG_RECORD_MAP = {
-    'args': 'args',
-    'asctime': 'asctime',
-    'created': 'created',
-    'exc_info': 'exc_info',
-    'exc_text': 'exc_text',
-    'filename': 'filename',
-    'funtion': 'funcName',
-    'levelname': 'levelname',
-    'levelno': 'levelno',
-    'lineno': 'lineno',
-    'module': 'module',
-    'msecs': 'msecs',
-    'message': 'message',
-    'msg': 'msg',
-    'name': 'name',
-    'pathname': 'pathname',
-    'process': 'process',
-    'process_name': 'processName',
-    'relative_created': 'relativeCreated',
-    'stack_info': 'stack_info',
-    'task_name': 'taskName',
-    'thread': 'thread',
-    'thread_name': 'threadName',
-    'timestamp': 'timestamp',
-}
-"""The log record built-in attributes mapping."""
 
 
 def setup_logging(settings: 'LoggingSettings | None' = None) -> None:
@@ -152,9 +109,9 @@ def setup_logging(settings: 'LoggingSettings | None' = None) -> None:
 
         handler_dump = handler.model_dump(exclude={'type_'})
         if handler.type_ == 'file':
-            handler_dump['class'] = 'logging.handlers.RotatingFileHandler'
+            handler_dump['class'] = 'plateforme.logging.FileHandler'
         if handler.type_ == 'stream':
-            handler_dump['class'] = 'logging.StreamHandler'
+            handler_dump['class'] = 'plateforme.logging.StreamHandler'
 
         settings_handlers[key] = {
             to_camel_case(key): value
@@ -177,7 +134,7 @@ def setup_logging(settings: 'LoggingSettings | None' = None) -> None:
 
     handlers: list[logging.Handler] = []
     for name in settings_handlers.keys():
-        handlers.append(_handlers.get(name))
+        handlers.append(logging._handlers.get(name))  # type: ignore
 
     queue = Queue(maxsize=-1)  # type: ignore
     queue_handler = QueueHandler(queue)
@@ -283,6 +240,42 @@ class JsonFormatter(logging.Formatter):
         return message
 
 
+# MARK: Handlers
+
+class FileHandler(logging.handlers.RotatingFileHandler):
+    """A file log handler."""
+
+    def __init__(
+        self,
+        filename: str,
+        mode: str = 'a',
+        maxBytes: int = 0,
+        backupCount: int = 0,
+        encoding: str | None = None,
+        delay: bool = False,
+        errors: str | None = None,
+    ) -> None:
+        """Initialize the file log handler."""
+        dirname = os.path.dirname(filename)
+        if dirname and not os.path.exists(dirname):
+            os.makedirs(dirname, exist_ok=True)
+
+        super().__init__(
+            filename=filename,
+            mode=mode,
+            maxBytes=maxBytes,
+            backupCount=backupCount,
+            encoding=encoding,
+            delay=delay,
+            errors=errors,
+        )
+
+
+class StreamHandler(logging.StreamHandler):  # type: ignore[type-arg]
+    """A stream log handler."""
+    pass
+
+
 # MARK: Filters
 
 class NoErrorFilter(logging.Filter):
@@ -295,6 +288,55 @@ class NoErrorFilter(logging.Filter):
 
 
 # MARK: Utilities
+
+class Color(StrEnum):
+    """An enumeration of ANSI color codes for log levels."""
+    RESET = '\033[0m'
+    CYAN = '\033[36m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    RED = '\033[31m'
+    MAGENTA = '\033[35m'
+
+
+COLOR_MAP = {
+    'DEBUG': Color.CYAN,
+    'INFO': Color.GREEN,
+    'WARNING': Color.YELLOW,
+    'ERROR': Color.RED,
+    'CRITICAL': Color.MAGENTA,
+}
+"""The color map for log levels."""
+
+
+LOG_RECORD_MAP = {
+    'args': 'args',
+    'asctime': 'asctime',
+    'created': 'created',
+    'exc_info': 'exc_info',
+    'exc_text': 'exc_text',
+    'filename': 'filename',
+    'funtion': 'funcName',
+    'levelname': 'levelname',
+    'levelno': 'levelno',
+    'lineno': 'lineno',
+    'module': 'module',
+    'msecs': 'msecs',
+    'message': 'message',
+    'msg': 'msg',
+    'name': 'name',
+    'pathname': 'pathname',
+    'process': 'process',
+    'process_name': 'processName',
+    'relative_created': 'relativeCreated',
+    'stack_info': 'stack_info',
+    'task_name': 'taskName',
+    'thread': 'thread',
+    'thread_name': 'threadName',
+    'timestamp': 'timestamp',
+}
+"""The log record built-in attributes mapping."""
+
 
 def supports_ansi_colors() -> bool:
     """Whether the terminal supports ANSI escape codes."""

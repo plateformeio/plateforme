@@ -14,15 +14,23 @@ from .core.logging import (
     LOG_RECORD_MAP,
     Color,
     DefaultFormatter,
+    FileHandler,
     JsonFormatter,
     NoErrorFilter,
+    StreamHandler,
 )
 
 __all__ = (
+    # Filters
+    'NoErrorFilter',
+    # Formatters
+    'DefaultFormatter',
+    'JsonFormatter',
+    # Handlers
+    'FileHandler',
+    'StreamHandler',
+    # Utilities
     'COLOR_MAP',
     'LOG_RECORD_MAP',
     'Color',
-    'DefaultFormatter',
-    'JsonFormatter',
-    'NoErrorFilter',
 )
