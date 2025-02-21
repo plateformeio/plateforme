@@ -1471,6 +1471,10 @@ class Configurable(Generic[Config], metaclass=ConfigurableMeta):
 
         return self
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        # Prevent passing keyword arguments to parent classes.
+        super().__init_subclass__()
+
 
 # MARK: Configuration Dictionary
 
