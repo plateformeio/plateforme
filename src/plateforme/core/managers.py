@@ -11,7 +11,7 @@ resources within the Plateforme framework.
 """
 
 import typing
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from typing import Any, Callable, Generic, Literal, TypeVar
 
 __all__ = (
@@ -72,6 +72,7 @@ class Manager(Iterable[str], Generic[Managed]):
         *,
         owner: Any | None = None,
         scope: Literal['endpoint', 'helper', 'all'] = 'all',
+        config: Mapping[str, Any] | None = None,
     ) -> dict[str, Callable[..., Any]]:
         """Collect all methods from the manager.
 
@@ -88,11 +89,17 @@ class Manager(Iterable[str], Generic[Managed]):
                 methods with the `__config_route__` attribute, or ``helper``
                 to collect only internal methods, or ``all`` to collect all
                 methods. Defaults to ``all``.
+            config: The configuration to use for the methods collection. It can
+                be used to filter methods based on the configuration attributes
+                of the methods. Defaults to ``None``.
 
         Returns:
             A dictionary of methods from the manager.
         """
+        from .services import validate_service_method
+
         methods: dict[str, Callable[..., Any]] = {}
+
         for name, method in self.__dict__.items():
             if not callable(method):
                 continue
@@ -107,6 +114,9 @@ class Manager(Iterable[str], Generic[Managed]):
             # Check owner
             method_owner = getattr(method, '__config_owner__', None)
             if owner is not None and owner != method_owner:
+                continue
+            # Check configuration
+            if config and not validate_service_method(method, config):
                 continue
             # Add method
             methods[name] = method
