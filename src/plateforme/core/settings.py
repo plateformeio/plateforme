@@ -2220,12 +2220,6 @@ class SettingsDict(TypedDict, total=False):
     will automatically reload when changes are detected in the underlying code.
     Defaults to ``False``."""
 
-    logging: LoggingSettings | LoggingSettingsDict | bool
-    """Whether to enable logging in the application. When enabled, the
-    application will log messages to the configured handlers. It accepts either
-    a boolean to enable or disable default logging settings or a dictionary
-    with custom logging settings. Defaults to ``True``."""
-
     secret_key: SecretStr | str
     """The application secret key. If not provided, a random alphanumeric
     secret key marked as insecure will be generated. Please note that it must
@@ -2294,6 +2288,16 @@ class SettingsDict(TypedDict, total=False):
     """The application time zone code. Defaults to ``'UTC'``."""
 
     # Application
+    auto_import_dependencies: bool
+    """Whether to automatically import dependencies of the application
+    packages. Auto-imported package dependencies are implemented with their
+    default settings. Defaults to ``True``."""
+
+    auto_import_namespaces: bool
+    """Whether to automatically import and create missing namespace
+    configurations for packages within the application.
+    Defaults to ``True``."""
+
     namespaces: Sequence[
         str | tuple[str, NamespaceSettings | NamespaceSettingsDict]
     ]
@@ -2317,16 +2321,6 @@ class SettingsDict(TypedDict, total=False):
     package and load its module resources and services.
     Defaults to a list with the special package symbol ``'$'``."""
 
-    auto_import_dependencies: bool
-    """Whether to automatically import dependencies of the application
-    packages. Auto-imported package dependencies are implemented with their
-    default settings. Defaults to ``True``."""
-
-    auto_import_namespaces: bool
-    """Whether to automatically import and create missing namespace
-    configurations for packages within the application.
-    Defaults to ``True``."""
-
     api: APISettings | APISettingsDict
     """The API settings. Defaults to the default API settings."""
 
@@ -2339,9 +2333,6 @@ class SettingsDict(TypedDict, total=False):
     """The limit of resources to return for the API route selections. It is
     used when generating the API routes for resources within the application
     to avoid too many resources being returned. Defaults to ``20``."""
-
-    deprecated: bool | None
-    """Whether the application is deprecated. Defaults to ``None``."""
 
     database_engines: EngineMap | dict[str, Path | str] | Path | str
     """The application database engines. It accepts either:
@@ -2356,6 +2347,15 @@ class SettingsDict(TypedDict, total=False):
     """The application database routers. A list of either module names from
     which to import database routers, or fully qualified names of database
     routers. Defaults to an empty list."""
+
+    logging: LoggingSettings | LoggingSettingsDict | bool
+    """Whether to enable logging in the application. When enabled, the
+    application will log messages to the configured handlers. It accepts either
+    a boolean to enable or disable default logging settings or a dictionary
+    with custom logging settings. Defaults to ``True``."""
+
+    deprecated: bool | None
+    """Whether the application is deprecated. Defaults to ``None``."""
 
 
 class Settings(_BaseSettings):
@@ -2384,35 +2384,6 @@ class Settings(_BaseSettings):
             mode is enabled, debug tracebacks will be returned on server and
             the application will automatically reload when changes are detected
             in the underlying code.""",
-    )
-
-    logging: LoggingSettings | bool = Field(
-        default=True,
-        title='Logging',
-        description="""Whether to enable logging in the application. When
-            enabled, the application will log messages to the configured
-            handlers. It accepts either a boolean to enable or disable default
-            logging settings or a dictionary with custom logging settings.""",
-        examples=[
-                True,
-                False,
-                {
-                    'level': 'DEBUG',
-                    'handlers': {
-                        'file_json': {
-                            'type': 'file',
-                            'formatter': 'json',
-                            'filename': 'my_app.jsonl',
-                        },
-                        'file_text': {
-                            'type': 'file',
-                            'level': 'ERROR',
-                            'formatter': 'default',
-                            'filename': 'my_app_errors.log',
-                        },
-                    },
-                },
-            ],
     )
 
     secret_key: SecretStr = Field(
@@ -2545,6 +2516,21 @@ class Settings(_BaseSettings):
     )
 
     # Application
+    auto_import_dependencies: bool = Field(
+        default=True,
+        title='Auto import package dependencies',
+        description="""Whether to automatically import dependencies of the
+            application packages. Auto-imported package dependencies are
+            implemented with their default settings.""",
+    )
+
+    auto_import_namespaces: bool = Field(
+        default=True,
+        title='Auto import namespaces',
+        description="""Whether to automatically import and create missing
+            namespace configurations for packages within the application.""",
+    )
+
     namespaces: Sequence[str | tuple[str, NamespaceSettings]] = Field(
         default_factory=list,
         title='Namespaces',
@@ -2575,21 +2561,6 @@ class Settings(_BaseSettings):
         ],
     )
 
-    auto_import_dependencies: bool = Field(
-        default=True,
-        title='Auto import package dependencies',
-        description="""Whether to automatically import dependencies of the
-            application packages. Auto-imported package dependencies are
-            implemented with their default settings.""",
-    )
-
-    auto_import_namespaces: bool = Field(
-        default=True,
-        title='Auto import namespaces',
-        description="""Whether to automatically import and create missing
-            namespace configurations for packages within the application.""",
-    )
-
     api: APISettings = Field(
         default=APISettings(),
         title='API',
@@ -2616,13 +2587,6 @@ class Settings(_BaseSettings):
             """,
     )
 
-    deprecated: bool | None = Field(
-        default=None,
-        title='Deprecated',
-        description="""Whether the application is deprecated.""",
-    )
-
-    # Database
     database_engines: EngineMap = Field(
         default=':memory:',
         validate_default=True,
@@ -2660,6 +2624,41 @@ class Settings(_BaseSettings):
         description="""The application database routers. A list of either
             module names from which to import database routers, or fully
             qualified names of database routers.""",
+    )
+
+    logging: LoggingSettings | bool = Field(
+        default=True,
+        title='Logging',
+        description="""Whether to enable logging in the application. When
+            enabled, the application will log messages to the configured
+            handlers. It accepts either a boolean to enable or disable default
+            logging settings or a dictionary with custom logging settings.""",
+        examples=[
+            True,
+            False,
+            {
+                'level': 'DEBUG',
+                'handlers': {
+                    'file_json': {
+                        'type': 'file',
+                        'formatter': 'json',
+                        'filename': 'my_app.jsonl',
+                    },
+                    'file_text': {
+                        'type': 'file',
+                        'level': 'ERROR',
+                        'formatter': 'default',
+                        'filename': 'my_app_errors.log',
+                    },
+                },
+            },
+        ],
+    )
+
+    deprecated: bool | None = Field(
+        default=None,
+        title='Deprecated',
+        description="""Whether the application is deprecated.""",
     )
 
 

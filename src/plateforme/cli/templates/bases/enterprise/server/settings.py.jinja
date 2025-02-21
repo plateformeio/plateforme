@@ -41,4 +41,19 @@ DATABASE_ENGINES = {
     'default': env('DATABASE', default='plateforme.db'),
 }
 
+LOGGING = {
+    'level': 'DEBUG' if DEBUG else 'INFO',
+    'handlers': {
+        'out': {
+            'type': 'file',
+            'formatter': 'json',
+        },
+        'err': {
+            'type': 'file',
+            'level': 'ERROR',
+            'formatter': 'default',
+        },
+    },
+}
+
 # Add more configuration here as needed...
