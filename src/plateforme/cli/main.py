@@ -9,6 +9,9 @@
 The main command line interface entry point.
 """
 
+import os
+import sys
+
 import typer
 
 from plateforme.core.projects import import_project_info
@@ -27,24 +30,25 @@ from . import (
     shell,
     start,
 )
-from .utils.context import Context
+from .utils.config import mount
+from .utils.context import Context, ContextInfo
 from .utils.info import print_info
 from .utils.logging import logger
 
 app = typer.Typer()
 
-app.add_typer(build.app, name='build')
-app.add_typer(clean.app, name='clean')
-app.add_typer(deploy.app, name='deploy')
-app.add_typer(drop.app, name='drop')
-app.add_typer(init.app, name='init')
-app.add_typer(inspect.app, name='inspect')
-app.add_typer(install.app, name='install')
-app.add_typer(migrate.app, name='migrate')
-app.add_typer(publish.app, name='publish')
-app.add_typer(run.app, name='run')
-app.add_typer(shell.app, name='shell')
-app.add_typer(start.app, name='start')
+mount(app, build.app, merge=True)
+mount(app, clean.app, merge=True)
+mount(app, deploy.app, merge=True)
+mount(app, drop.app, merge=True)
+mount(app, init.app, merge=True)
+mount(app, inspect.app, merge=True)
+mount(app, install.app, merge=True)
+mount(app, migrate.app, merge=True)
+mount(app, publish.app, merge=True)
+mount(app, run.app, merge=True)
+mount(app, shell.app, merge=True)
+mount(app, start.app, merge=True)
 
 
 @app.callback()
@@ -52,17 +56,33 @@ def main(
     ctx: Context,
     project: str | None = typer.Option(
         None,
-        '--project', '-p',
+        '--project',
+        '-p',
         help=(
             "Path to the project root directory. If not provided, it will "
-            "search for the project root directory in the current working "
-            "directory."
+            "search for a project root directory in the current working "
+            "directory or its parent directories."
+        ),
+    ),
+    project_app: str | None = typer.Option(
+        None,
+        '--app',
+        '-a',
+        help=(
+            "The application to run the command for. If not provided and a "
+            "project is found, it will be set to the default project "
+            "application."
         ),
     ),
 ) -> None:
     """Command line interface main entry point."""
+    # Add current working directory to the Python path
+    sys.path.insert(0, os.getcwd())
+
+    # Print information
     print_info(ctx)
 
+    # Resolve project
     try:
         project_info = import_project_info(project)
     except Exception as error:
@@ -71,4 +91,8 @@ def main(
             raise typer.Exit(code=1)
         project_info = None
 
-    ctx.obj = {'project': project_info}
+    # Initialize context information
+    ctx.obj = ContextInfo(
+        project=project_info,
+        project_app=project_app,
+    )

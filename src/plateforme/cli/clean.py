@@ -17,7 +17,7 @@ from .utils.logging import logger
 app = typer.Typer()
 
 
-@app.callback(invoke_without_command=True)
+@app.command()
 def clean(ctx: Context) -> None:
     """Clean the plateforme project."""
-    logger.info(f"Cleaning project... (from {ctx.obj['project']})")
+    logger.info(f"Cleaning project...")

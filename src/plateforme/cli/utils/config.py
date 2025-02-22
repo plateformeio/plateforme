@@ -9,11 +9,58 @@
 Configuration utilities for the command line interface.
 """
 
-import os
+import typing
+from typing import Literal
+
+import typer
 
 
-def supports_utf8() -> bool:
-    lang = os.environ.get('LANG', '').lower()
-    if 'utf-8' in lang or 'utf8' in lang:
-        return True
-    return False
+@typing.overload
+def mount(
+    app: typer.Typer,
+    instance: typer.Typer,
+    *,
+    merge: Literal[True],
+) -> None:
+    ...
+
+@typing.overload
+def mount(
+    app: typer.Typer,
+    instance: typer.Typer,
+    *,
+    merge: Literal[False] = False,
+    **kwargs: typing.Any,
+) -> None:
+    ...
+
+def mount(
+    app: typer.Typer,
+    instance: typer.Typer,
+    *,
+    merge: bool = False,
+    **kwargs: typing.Any,
+) -> None:
+    """Mount a Typer instance onto another Typer instance.
+
+    Args:
+        app: The Typer instance to mount the other instance onto.
+        instance: The Typer instance to mount onto the other instance.
+        merge: Whether to merge the commands of the two instances.
+            Defaults to ``False``.
+        **kwargs: Additional keyword arguments to pass to the `add_typer`
+            method if `merge` is set to ``False``.
+    """
+    if merge:
+        # Handle callback
+        if instance.registered_callback is not None:
+            if app.registered_callback is not None:
+                raise ValueError("Cannot merge instances both with callback.")
+            app.registered_callback = instance.registered_callback
+        # Handle commands and groups
+        for command in instance.registered_commands:
+            app.registered_commands.append(command)
+        for group in instance.registered_groups:
+            app.registered_groups.append(group)
+    else:
+        app.add_typer(instance, **kwargs)

@@ -10,7 +10,9 @@ This module provides utilities for managing project configurations within the
 Plateforme framework.
 """
 
+import importlib
 import tomllib
+import typing
 from pathlib import Path
 from typing import Any, Self
 
@@ -23,6 +25,9 @@ from .schema.models import BaseModel, ModelConfig
 from .settings import PackageSettings
 from .types.networks import Email
 from .types.paths import AnyPath
+
+if typing.TYPE_CHECKING:
+    from plateforme import Plateforme
 
 __all__ = (
     'PROJECT_FILES',
@@ -94,6 +99,40 @@ class ProjectAppInfo(BaseModel):
                 f"Got: {self!r}."
             )
         return self
+
+    def import_app(self) -> 'Plateforme':
+        """Import the application instance from the start command."""
+        from .main import Plateforme
+
+        args = self.start.split()
+        module_path, module_attr = args[0].split(':')
+        if not module_path or not module_attr:
+            raise ImportError(
+                f"Invalid application path provided in the start command: "
+                f"{self.start}. Expected format: `package.module:app`"
+            )
+
+        try:
+            module = importlib.import_module(module_path)
+            module_app = getattr(module, module_attr)
+        except ImportError as error:
+            raise ImportError(
+                f"Failed to import the application module from the start "
+                f"command: {module_path}"
+            ) from error
+        except AttributeError as error:
+            raise ImportError(
+                f"Failed to import the application attribute from the start "
+                f"command: {module_attr}"
+            ) from error
+
+        if not isinstance(module_app, Plateforme):
+            raise ImportError(
+                f"Application instance must be a subclass of Plateforme. "
+                f"Got: {module_app!r}"
+            )
+
+        return module_app
 
 
 class ProjectContactInfo(BaseModel):

@@ -20,34 +20,20 @@ from .utils.logging import logger
 app = typer.Typer()
 
 
-@app.callback(invoke_without_command=True)
-def build(
-    ctx: Context,
-    app: str = typer.Argument(
-        'default',
-        help=(
-            "The application to build. If not provided, it will build the "
-            "default application."
-        ),
-    ),
-) -> None:
+@app.command()
+def build(ctx: Context) -> None:
     """Build the plateforme project application."""
-    logger.info(f"Building project application... (from {ctx.obj['project']})")
+    config, project, project_app = ctx.obj.get_app_config()
 
-    project = ctx.obj['project']
-    if not project:
-        logger.error("No project found")
-        raise typer.Exit(code=1)
-    if not project.apps or app not in project.apps:
-        logger.error(f"No application configuration found for {app!r}")
-        raise typer.Exit(code=1)
+    logger.info(f"Building application... (from {project}:{project_app})")
 
-    config = project.apps[app]
-    if not config.build:
+    if config.build is None:
         logger.warning(f"No build command found")
         return
 
-    assert config.scripts is not None
+    if config.scripts is None:
+        logger.error("No scripts found")
+        raise typer.Exit(code=1)
 
     for script in config.build:
         command = config.scripts[script].split()
@@ -65,8 +51,9 @@ def build(
                     "PYTHONPATH": str(project.directory),
                 },
             )
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to build application {app!r} ({script})")
+        except subprocess.CalledProcessError:
+            logger.error(f"An error occurred while running script {script!r}")
+            logger.error(f"Failed to build application {project_app!r}")
             raise typer.Exit(code=1)
 
-    logger.info(f"Application {app!r} built successfully")
+    logger.info(f"Application {project_app!r} built successfully")

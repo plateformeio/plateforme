@@ -9,18 +9,33 @@
 Information utilities for the command line interface.
 """
 
+import os
+from enum import Enum
+
 from rich.console import Console
 from rich.panel import Panel
+from rich.style import Style
 from rich.text import Text
 
 from plateforme.framework import VERSION
 
-from .config import supports_utf8
 from .context import Context
-from .styles import Styles
 
 TITLE = 'plateforme-cli'
 """The title of the command line interface."""
+
+
+class Styles(Enum):
+    """An enumeration of available style options."""
+
+    COMMAND = Style(color="magenta", bold=True)
+    """Style for command text."""
+
+    TITLE = Style(color="blue", bold=True)
+    """Style for title text."""
+
+    VERSION = Style(dim=True)
+    """Style for version text."""
 
 
 console = Console()
@@ -38,3 +53,11 @@ def print_info(ctx: Context) -> None:
 
     panel = Panel(info, border_style='dim', expand=False, padding=(0, 1))
     console.print(panel)
+
+
+def supports_utf8() -> bool:
+    """Whether the terminal supports UTF-8 encoding."""
+    lang = os.environ.get('LANG', '').lower()
+    if 'utf-8' in lang or 'utf8' in lang:
+        return True
+    return False

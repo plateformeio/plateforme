@@ -20,31 +20,42 @@ from .utils.logging import logger
 app = typer.Typer()
 
 
-@app.callback(invoke_without_command=True)
+@app.command(
+    context_settings={
+        'allow_extra_args': True,
+        'ignore_unknown_options': True,
+    },
+)
 def start(
     ctx: Context,
-    app: str = typer.Argument(
-        'default',
+    nargs: list[str] | None = typer.Argument(
+        None,
         help=(
-            "The application to start. If not provided, it will start the "
-            "default application."
+            "Arguments to pass to the uvicorn command. "
+            "Try 'plateforme start --help-nargs' for more information."
         ),
+    ),
+    help_nargs: bool = typer.Option(
+        False,
+        '--help-nargs',
+        help="Show help message for the uvicorn 'nargs' arguments.",
     ),
 ) -> None:
     """Start the plateforme project application."""
-    logger.info(f"Starting application... (from {ctx.obj['project']})")
+    if help_nargs:
+        try:
+            subprocess.run(['uvicorn', '--help'], check=True)
+        except subprocess.CalledProcessError:
+            logger.error("Failed to run 'uvicorn --help'")
+            raise typer.Exit(code=1)
+        raise typer.Exit()
 
-    project = ctx.obj['project']
-    if not project:
-        logger.error("No project found")
-        raise typer.Exit(code=1)
-    if not project.apps or app not in project.apps:
-        logger.error(f"No application configuration found for {app!r}")
-        raise typer.Exit(code=1)
+    config, project, project_app = ctx.obj.get_app_config()
 
-    config = project.apps[app]
+    logger.info(f"Starting application... (from {project}:{project_app})")
 
     command = ['uvicorn', *config.start.split()]
+    command.extend(nargs or [])
 
     try:
         subprocess.run(
@@ -57,5 +68,5 @@ def start(
             },
         )
     except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to start application {app!r}")
+        logger.error(f"Failed to start application {project_app!r}")
         raise typer.Exit(code=1)

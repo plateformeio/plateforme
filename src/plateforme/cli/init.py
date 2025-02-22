@@ -31,7 +31,7 @@ dirname = Path(__file__).parent
 app = typer.Typer()
 
 
-@app.callback(invoke_without_command=True)
+@app.command()
 def init(
     ctx: Context,
     root: str = typer.Argument('.', help="The project root directory."),

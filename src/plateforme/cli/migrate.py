@@ -17,7 +17,7 @@ from .utils.logging import logger
 app = typer.Typer()
 
 
-@app.callback(invoke_without_command=True)
+@app.command()
 def migrate(ctx: Context) -> None:
     """Migrate the plateforme project."""
-    logger.info(f"Migrateing project... (from {ctx.obj['project']})")
+    logger.info(f"Migrateing project...")

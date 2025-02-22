@@ -17,7 +17,7 @@ from .utils.logging import logger
 app = typer.Typer()
 
 
-@app.callback(invoke_without_command=True)
+@app.command()
 def deploy(ctx: Context) -> None:
     """Deploy the plateforme project."""
-    logger.info(f"Deploying project... (from {ctx.obj['project']})")
+    logger.info(f"Deploying project...")

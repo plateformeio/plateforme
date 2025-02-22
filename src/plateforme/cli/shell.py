@@ -22,7 +22,12 @@ from .utils.logging import logger
 
 app = typer.Typer()
 
-@app.callback(invoke_without_command=True)
+
+SHELLS = ['ipython', 'bpython', 'python']
+"""The available interactive shells."""
+
+
+@app.command()
 def shell(
     ctx: Context,
     no_startup: bool = typer.Option(
@@ -46,6 +51,7 @@ def shell(
         None,
         '--command',
         '-c',
+        '-x',
         help=(
             "Run directly a command and exit instead of opening an "
             "interactive shell."
@@ -58,21 +64,25 @@ def shell(
     It tries to use `IPython` or `bpython`, if one of them is available. Any
     standard input is executed as code.
     """
-    shells = ['ipython', 'bpython', 'python']
+    config, project, project_app = ctx.obj.get_app_config()
+
+    logger.info(f"Starting shell... (from {project}:{project_app})")
+
+    # Set up a namespace environment for the shell.
+    namespace: dict[str, Any] = {
+        'app': config.import_app(),
+    }
 
     def run_ipython() -> None:
         from IPython import start_ipython  # type: ignore
-        start_ipython(argv=[])
+        start_ipython(argv=[], user_ns=namespace)
 
     def run_bpython() -> None:
         import bpython  # type: ignore
-        bpython.embed()
+        bpython.embed(locals_=namespace)
 
     def run_python() -> None:
         import code
-
-        # Set up a dictionary to serve as the environment for the shell.
-        imported_objects: dict[str, Any] = {}
 
         # Honor both "$PYTHONSTARTUP" and ".pythonrc.py" while following system
         # conventions using "$PYTHONSTARTUP" first then "~/.pythonrc.py".
@@ -92,7 +102,7 @@ def shell(
                 try:
                     exec(
                         compile(pythonrc_code, pythonrc, "exec"),
-                        imported_objects,
+                        namespace,
                     )
                 except Exception:
                     traceback.print_exc()
@@ -123,17 +133,17 @@ def shell(
             import rlcompleter
 
             readline.set_completer(
-                rlcompleter.Completer(imported_objects).complete
+                rlcompleter.Completer(namespace).complete
             )
         except ImportError:
             pass
 
         # Start the interactive interpreter.
-        code.interact(local=imported_objects)
+        code.interact(local=namespace)
 
     # Execute the command and exit.
     if command:
-        exec(command, globals())
+        exec(command, globals(), namespace)
         return
 
     # Execute "stdin" if it has anything to read and exit.
@@ -143,10 +153,10 @@ def shell(
         and not sys.stdin.isatty()
         and select.select([sys.stdin], [], [], 0)[0]
     ):
-        exec(sys.stdin.read(), globals())
+        exec(sys.stdin.read(), globals(), namespace)
         return
 
-    available_shells = [interface] if interface else shells
+    available_shells = [interface] if interface else SHELLS
 
     for shell in available_shells:
         try:
