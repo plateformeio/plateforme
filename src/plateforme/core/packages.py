@@ -321,6 +321,9 @@ class Package(Representation):
 
             # Resolve dependents target forward references
             for field in __plateforme__.dependents.get(name, set()):
+                # Skip self-referencing dependent fields
+                if field.target is field.owner:
+                    continue
                 # Check for invalid dependent field
                 if not isinstance(field.target, str):
                     raise TypeError(

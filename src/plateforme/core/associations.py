@@ -214,8 +214,16 @@ class Association(Representation):
                 )
 
             # Create association columns
-            for resource, link in \
-                    zip((owner, target), (owner_link, target_link)):
+            for count, (resource, link) in \
+                    enumerate(zip((owner, target), (owner_link, target_link))):
+                # Handle association column naming
+                alias = resource.resource_config.alias
+                if owner is target:
+                    name = f'{alias}_{count}_id'
+                else:
+                    name = f'{alias}_id'
+
+                # Handle association column configuration
                 if link is not None:
                     unique = link.collection == 'set'
                     col_extra = {**(link.column_extra or {})}
@@ -227,7 +235,7 @@ class Association(Representation):
 
                 columns.append(
                     Column(
-                        '%s_id' % resource.resource_config.alias,
+                        name,
                         resource.resource_config.id_engine,
                         ForeignKey(
                             resource.resource_attributes['id'],
@@ -269,7 +277,7 @@ class Association(Representation):
 
             # Retrieve association relationship attribute
             rel_attribute = owner_link.rel_attribute \
-                or '%s_id' % owner_link.alias
+                or f'{owner_link.alias}_id'
             if hasattr(owner, rel_attribute):
                 raise PlateformeError(
                     f"Invalid association implementation for {self.alias!r} "
@@ -360,21 +368,6 @@ class Association(Representation):
 
 # MARK: Utilities
 
-def _sort_links(*links: 'ResourceFieldInfo') -> tuple['ResourceFieldInfo', ...]:
-    """Sort the given linked fields based on their configuration."""
-    # Assign collection type to integer mapping
-    collection_map = {None: 0, 'set': 1, 'list': 2}
-
-    return tuple(sorted(
-        links,
-        key=lambda link: (
-            collection_map.get(link.collection, 3),
-            link.rel_attribute,
-            link.owner.__qualname__
-        ),
-    ))
-
-
 def _build_relationship(
     link_a: 'ResourceFieldInfo',
     link_b: 'ResourceFieldInfo | None' = None,
@@ -400,6 +393,18 @@ def _build_relationship(
             between the two resources. This argument is required and must be
             a list containing the foreign key columns for the relationship.
     """
+    # Primary and secondary join configuration
+    owner_id = link_a.owner.resource_attributes['id']
+    if secondary is None:
+        primaryjoin = secondaryjoin = None
+    else:
+        assert isinstance(link_a.target, type)
+        owner_id = link_a.owner.resource_attributes['id']
+        taget_id = link_a.target.resource_attributes['id']
+        assert len(foreign_keys) == 2
+        primaryjoin = foreign_keys[0] == owner_id
+        secondaryjoin = foreign_keys[1] == taget_id
+
     # Backref configuration
     if link_b is not None:
         if not hasattr(link_b.owner, link_b.alias):
@@ -455,6 +460,8 @@ def _build_relationship(
             link_a.target,
             secondary=secondary,
             collection_class=collection_class,
+            primaryjoin=primaryjoin,
+            secondaryjoin=secondaryjoin,
             back_populates=back_populates,
             cascade=cascade,
             lazy=lazy,
@@ -462,3 +469,18 @@ def _build_relationship(
             **rel_extra,
         ),
     )
+
+
+def _sort_links(*links: 'ResourceFieldInfo') -> tuple['ResourceFieldInfo', ...]:
+    """Sort the given linked fields based on their configuration."""
+    # Assign collection type to integer mapping
+    collection_map = {None: 0, 'set': 1, 'list': 2}
+
+    return tuple(sorted(
+        links,
+        key=lambda link: (
+            collection_map.get(link.collection, 3),
+            link.rel_attribute,
+            link.owner.__qualname__
+        ),
+    ))
