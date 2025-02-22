@@ -10,7 +10,9 @@ This module provides utilities for managing the Plateforme framework version
 and repository information.
 """
 
+import typing
 from enum import StrEnum
+from typing import Any, Literal
 
 __all__ = (
     'AUTHOR',
@@ -36,7 +38,17 @@ VERSION = '0.1.0-a1'
 """The version of the Plateforme framework."""
 
 
-def version_info() -> str:
+@typing.overload
+def version_info(format: Literal['text'] = 'text') -> str:
+    ...
+
+@typing.overload
+def version_info(format: Literal['json']) -> dict[str, Any]:
+    ...
+
+def version_info(
+    format: Literal['text', 'json'] = 'text',
+) -> str | dict[str, Any]:
     """The version information of the Plateforme framework.
 
     Returns:
@@ -102,8 +114,10 @@ def version_info() -> str:
         'related packages': ' '.join(related_packages),
         'last commit': most_recent_commit,
     }
+    if format == 'json':
+        return info
     return '\n'.join(
-        '{:>30} {}'.format(key + ':', str(value).replace('\n', ' '))
+        '{:>18} {}'.format(key + ':', str(value).replace('\n', ' '))
         for key, value in info.items()
     )
 

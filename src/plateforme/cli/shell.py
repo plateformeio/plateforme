@@ -68,9 +68,12 @@ def shell(
 
     logger.info(f"Starting shell... (from {project}:{project_app})")
 
+    import plateforme
+
     # Set up a namespace environment for the shell.
     namespace: dict[str, Any] = {
         'app': config.import_app(),
+        'plateforme': plateforme,
     }
 
     def run_ipython() -> None:
