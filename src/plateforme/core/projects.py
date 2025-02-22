@@ -12,10 +12,11 @@ Plateforme framework.
 
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from .patterns import parse_email
 from .representations import ReprArgs
+from .schema.core import ValidationInfo
 from .schema.decorators import field_validator, model_validator
 from .schema.fields import Field
 from .schema.models import BaseModel, ModelConfig
@@ -83,18 +84,16 @@ class ProjectAppInfo(BaseModel):
     )
 
     @model_validator(mode='after')
-    @classmethod
-    def __validator__(cls, obj: Any) -> Any:
-        assert isinstance(obj, ProjectAppInfo)
-        if obj.build and (
-            obj.scripts is None
-            or not all(script in obj.scripts for script in obj.build)
+    def __validator__(self) -> Self:
+        if self.build and (
+            self.scripts is None
+            or not all(script in self.scripts for script in self.build)
         ):
             raise ValueError(
                 f"Build scripts must match the keys of the `scripts` field. "
-                f"Got: {obj!r}."
+                f"Got: {self!r}."
             )
-        return obj
+        return self
 
 
 class ProjectContactInfo(BaseModel):
@@ -309,17 +308,19 @@ class ProjectInfo(BaseModel):
             relative paths within the project configuration.""",
     )
 
-    @model_validator(mode='wrap')
-    @classmethod
-    def __validator__(cls, obj: Any, handler: Any) -> Any:
-        obj = handler(obj)
-        if getattr(obj, 'version', None) is None \
-                and 'version' not in getattr(obj, 'dynamic', []) :
+    @model_validator(mode='after')
+    def __validator__(self, info: ValidationInfo) -> Self:
+        # Handle version strict validation
+        context = info.context or {}
+        if not context.get('strict'):
+            return self
+        if getattr(self, 'version', None) is None \
+                and 'version' not in getattr(self, 'dynamic', []) :
             raise ValueError(
                 f"Project information must have a version set either as a "
-                f"static or dynamic field. Got: {obj!r}."
+                f"static or dynamic field. Got: {self!r}."
             )
-        return obj
+        return self
 
     @field_validator('readme', mode='before')
     @classmethod
@@ -395,8 +396,10 @@ def import_project_info(
         ) from error
 
     if project_path.name == 'config.toml':
+        project_strict = False
         project_config = project_data.get('plateforme', {})
     elif project_path.name == 'pyproject.toml':
+        project_strict = True
         project_tool = project_data.get('tool', {})
         project_config = {
             **project_data.get('project', {}),
@@ -415,7 +418,13 @@ def import_project_info(
             f"section for 'config.toml' files."
         )
 
-    return ProjectInfo(**project_config, directory=project_path.parent)
+    project_config['directory'] = project_path.parent
+    project_info = ProjectInfo.model_validate(
+        project_config,
+        strict=project_strict,
+    )
+
+    return project_info
 
 
 def resolve_project_path(

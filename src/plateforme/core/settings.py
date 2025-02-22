@@ -21,6 +21,7 @@ from typing import (
     Coroutine,
     Literal,
     Required,
+    Self,
     Union,
 )
 
@@ -1547,15 +1548,13 @@ class LoggingFileHandlerSettings(BaseModel):
     )
 
     @model_validator(mode='after')
-    @classmethod
-    def __validator__(cls, obj: Any) -> Any:
-        assert isinstance(obj, cls)
-        if obj.filename is None:
-            if obj.formatter == 'json':
-                obj.__dict__['filename'] = 'logs/plateforme.jsonl'
+    def __validator__(self) -> Self:
+        if self.filename is None:
+            if self.formatter == 'json':
+                self.__dict__['filename'] = 'logs/plateforme.jsonl'
             else:
-                obj.__dict__['filename'] = 'logs/plateforme.log'
-        return obj
+                self.__dict__['filename'] = 'logs/plateforme.log'
+        return self
 
 
 # MARK:> Stream Handler
@@ -1753,36 +1752,34 @@ class LoggingSettings(BaseModel):
     )
 
     @model_validator(mode='after')
-    @classmethod
-    def __validator__(cls, obj: Any) -> Any:
-        assert isinstance(obj, cls)
+    def __validator__(self) -> Self:
         # Set default filters
-        obj.filters.setdefault(
+        self.filters.setdefault(
             'no_errors', 'plateforme.logging.NoErrorFilter'
         )
         # Set default formatters
-        obj.formatters.setdefault(
+        self.formatters.setdefault(
             'default', LoggingDefaultFormatterSettings()
         )
-        obj.formatters.setdefault(
+        self.formatters.setdefault(
             'color', LoggingDefaultFormatterSettings(use_colors=True)
         )
-        obj.formatters.setdefault(
+        self.formatters.setdefault(
             'json', LoggingJsonFormatterSettings()
         )
         # Set default handlers
-        obj.handlers.setdefault('stdout', LoggingStreamHandlerSettings(
+        self.handlers.setdefault('stdout', LoggingStreamHandlerSettings(
             level=None,
             stream='ext://sys.stdout',
             filters=['no_errors'],
             formatter='color',
         ))
-        obj.handlers.setdefault('stderr', LoggingStreamHandlerSettings(
+        self.handlers.setdefault('stderr', LoggingStreamHandlerSettings(
             level='WARNING',
             stream='ext://sys.stderr',
             formatter='color',
         ))
-        return obj
+        return self
 
 
 # MARK: Namespace Settings
