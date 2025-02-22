@@ -73,12 +73,21 @@ class Environment(Iterable[str]):
         >>> env = Environment()
 
     Note:
-        The environment class can be used as a namespace to get, set and delete
-        environment variables. Initializing the environment class will load the
-        environment variables from the os environment, the ``.env`` common file
-        and the ``.env.{mode}`` specific mode file, where ``{mode}`` is the
-        environment mode (e.g. ``dev``, ``development``, ``prod``,
-        ``production``, etc.), found in the process root directory.
+        The environment class can be used as a namespace to get, set, and
+        delete environment variables. Initializing the environment class will
+        load the environment variables from the os environment, and the
+        environment files found in the process root directory with the
+        following order priority (from highest to lowest):
+        - The environment ``.env.{mode}.local`` local specific mode file,
+        - The environment ``.env.{mode}`` specific mode file,
+        - The environment ``.env.local`` local common file,
+        - The environment ``.env`` common file.
+
+    Note:
+        Specific mode files are loaded based on the environment mode provided:
+        - ``'dev'`` and ``'development'`` for development mode,
+        - ``'prod'`` and ``'production'`` for production mode,
+        - or any other mode name for specific mode.
     """
     namespace: dict[str, str] = {}
 
@@ -221,15 +230,28 @@ class Environment(Iterable[str]):
         env_mode = mode if mode else os.getenv('PLATEFORME_ENV', 'development')
 
         # Retrieve the common and mode environment files
-        env_files: list[str] = ['.env']
+        env_files: list[str] = ['.env.local', '.env']
         if env_mode in ('dev', 'development'):
             env_mode = 'development'
-            env_files.extend(['.env.dev', '.env.development'])
+            env_files.extend([
+                '.env.dev.local',
+                '.env.development.local',
+                '.env.dev',
+                '.env.development',
+            ])
         elif env_mode in ('prod', 'production'):
             env_mode = 'production'
-            env_files.extend(['.env.prod', '.env.production'])
+            env_files.extend([
+                '.env.prod.local',
+                '.env.production.local',
+                '.env.prod',
+                '.env.production',
+            ])
         else:
-            env_files.append(f'.env.{env_mode}')
+            env_files.extend([
+                f'.env.{env_mode}.local',
+                f'.env.{env_mode}',
+            ])
 
         # Initialize the environment namespace
         self.clear()
@@ -315,7 +337,7 @@ class Environment(Iterable[str]):
         value = None if value == '' and default is None else value
 
         # Retrieve cast from default value if not provided
-        if cast is None and default:
+        if cast is None and default not in (Undefined, None):
             cast = type(default)
         # Parse value
         if value != default or (parse_default and value is not None):

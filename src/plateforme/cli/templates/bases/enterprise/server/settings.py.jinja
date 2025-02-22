@@ -3,7 +3,9 @@ Settings are loaded from environment variables, and can be overridden. The
 environment variables will be loaded with the following order priority (from
 highest to lowest):
 - The os environment variables
+- The environment ``.env.{mode}.local`` local specific mode file
 - The environment ``.env.{mode}`` specific mode file
+- The environment ``.env.local`` local common file
 - The environment ``.env`` common file
 - The default environment files provided in the constructor
 - The default environment variables provided in the constructor

@@ -1,4 +1,5 @@
 # System files
+private
 *.DS_Store
 
 # Logs
@@ -14,24 +15,24 @@ __pycache__/
 
 # Distribution and packaging
 __pypackages__/
+.eggs/
+.installed.cfg
 .Python
 build/
 develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
-*.egg
-*.egg-info/
 lib/
 lib64/
 parts/
+pip-wheel-metadata/
 sdist/
+share/python-wheels/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
-.installed.cfg
+*.egg-info/
+*.egg
 MANIFEST
 
 # C extensions
@@ -42,13 +43,15 @@ celerybeat-schedule
 celerybeat.pid
 
 # Environments
-.env
-.env.*
 .venv
-env/
+.venv/
 venv/
-env.bak/
 venv.bak/
+*.local
+
+# Databases
+*.db
+*.sqlite3
 
 # IPython
 profile_default/
@@ -97,20 +100,25 @@ docs/_build/
 .spyderproject
 .spyproject
 
+# Temporary
+temp
+tmp
+
 # Translations
 *.mo
 *.pot
 
 # Unit test and coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
 .hypothesis/
 .pytest_cache/
+.nox/
+.tox/
+.cache
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+program.prof
+*.cover
+*.py,cover
