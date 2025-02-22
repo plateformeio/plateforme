@@ -34,7 +34,7 @@ LICENSE = 'MIT'
 """The license of the Plateforme framework."""
 
 
-VERSION = '0.1.0-a1'
+VERSION = '0.1.0-a2'
 """The version of the Plateforme framework."""
 
 
