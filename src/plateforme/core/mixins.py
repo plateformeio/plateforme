@@ -17,6 +17,7 @@ __all__ = (
 
 from datetime import datetime, timezone
 
+from .resources import BaseResource
 from .schema.fields import Field
 
 
@@ -28,11 +29,13 @@ class Archivable:
     pass
 
 
-class Auditable:
+class Auditable(BaseResource):
     """Auditable mixin for resource class.
 
     FIXME: Implement auditable mixin for resource class.
     """
+
+    __abstract__ = True
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
