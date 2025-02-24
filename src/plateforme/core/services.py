@@ -1758,8 +1758,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
 def bind_service(
     service: BaseService,
     facade: ServiceFacade | ServiceWithSpecFacade,
-    *,
-    config: Mapping[str, Any] | None = None,
+    **overrides: Any,
 ) -> None:
     """Bind the service to a service facade.
 
@@ -1769,9 +1768,9 @@ def bind_service(
     Args:
         service: The service instance to bind to the service facade.
         facade: The service facade to bind the service to.
-        config: The service configuration to update when binding the service.
-            It is used to override the default service configuration.
-            Defaults to ``None``.
+        **overrides: The service configuration updates to apply when binding
+            the service to the facade. It is used to override the default
+            service configuration. Defaults to ``None``.
     """
     # Validate owner
     owner = service.service_owner
@@ -1799,8 +1798,8 @@ def bind_service(
 
     # Bind service to the facade and update configuration
     object.__setattr__(service, 'service_owner', facade)
-    if config is not None:
-        service.service_config.update(config)
+    if overrides:
+        service.service_config.update(overrides)
 
     # Call post bind hook
     service.__post_bind__(facade)
@@ -1909,7 +1908,7 @@ def unbind_service(service: BaseService) -> None:
 
 def validate_service_method(
     method: FunctionLenientType,
-    config: Mapping[str, Any],
+    config: Mapping[str, Any] | None = None,
 ) -> bool:
     """Validate a service method.
 

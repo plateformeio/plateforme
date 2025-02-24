@@ -158,6 +158,7 @@ from .services import (
     copy_service,
     load_service,
     unbind_service,
+    validate_service_method,
 )
 from .specs import (
     BaseSpec,
@@ -331,10 +332,17 @@ class ResourceConfigDict(BaseModelConfigDict, total=False):
     - ``unique``: Whether the index is unique. Defaults to ``True``.
     Defaults to an empty sequence."""
 
-    endpoints: BaseServiceConfigDict | None
-    """A base configuration for the resource service endpoints that allows to
-    select specific endpoint methods to include or exclude from the services,
-    and configure their default behavior. Defaults to ``None``."""
+    endpoints: Sequence[
+        tuple[list[str] | set[str] | str | None,  BaseServiceConfigDict]
+    ] | BaseServiceConfigDict | None
+    """A base configuration for the resource service endpoints, allowing
+    method-level inclusion/exclusion and default behavior customization. If a
+    sequence of tuples  is provided, each tuple maps service names (as a
+    `list`, `set`, `string`, or ``None``) to a configuration. If ``None`` is
+    used as the service name, it acts as the default match if no other entry
+    applies. Only the first matching entry is used when resolving a service
+    name. If a single configuration is provided, it applies to all services.
+    Defaults to ``None``."""
 
     services: Sequence[BaseService | EllipsisType | ServiceType]
     """A sequence of services to bind to the resource. The services are used to
@@ -443,10 +451,17 @@ class ResourceConfig(ModelConfig):
     Defaults to an empty tuple.
     """
 
-    endpoints: BaseServiceConfigDict | None = None
-    """A base configuration for the resource service endpoints that allows to
-    select specific endpoint methods to include or exclude from the services,
-    and configure their default behavior. Defaults to ``None``."""
+    endpoints: Sequence[
+        tuple[list[str] | set[str] | str | None,  BaseServiceConfigDict]
+    ] | BaseServiceConfigDict | None = None
+    """A base configuration for the resource service endpoints, allowing
+    method-level inclusion/exclusion and default behavior customization. If a
+    sequence of tuples  is provided, each tuple maps service names (as a
+    `list`, `set`, `string`, or ``None``) to a configuration. If ``None`` is
+    used as the service name, it acts as the default match if no other entry
+    applies. Only the first matching entry is used when resolving a service
+    name. If a single configuration is provided, it applies to all services.
+    Defaults to ``None``."""
 
     services: tuple[BaseService | EllipsisType | ServiceType, ...] = ()
     """A tuple of services to bind to the resource. The services are used to
@@ -484,7 +499,28 @@ class ResourceConfig(ModelConfig):
             return UuidEngine[UUID4]
         return IntegerEngine
 
-    def post_init(self) -> None:
+    def get_service_overrides(
+        self, name: str | None = None
+    ) -> BaseServiceConfigDict:
+        """Get the service configuration overrides for the given name."""
+        default = {}
+        # Handle direct configuration
+        if self.endpoints is None:
+            return default
+        if isinstance(self.endpoints, dict):
+            return self.endpoints
+        # Handle sequence configuration
+        for lookup, config in self.endpoints:
+            if lookup is None:
+                default = config
+            elif isinstance(lookup, str):
+                if name == lookup:
+                    return config
+            elif name in lookup:
+                return config
+        return default
+
+    def __post_init__(self) -> None:
         """Post-initialization steps for the resource configuration."""
         # Skip post-initialization if the configuration owner is not set
         resource = self.__config_owner__
@@ -2684,9 +2720,10 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
                     f"{cls.__qualname__!r}. The service must be an instance "
                     f"of `BaseService`."
                 )
+            service_name = service.service_config.name
             # Check if service is already bound to resource
             if any(type(s) is type(service) for s in cls.__config_services__) \
-                    or cls._get_service(service.service_config.name):
+                    or cls._get_service(service_name):
                 if not raise_errors:
                     continue
                 raise PlateformeError(
@@ -2695,7 +2732,8 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
                     code='services-already-bound',
                 )
             # Bind service to resource
-            bind_service(service, cls, config=cls.resource_config.endpoints)
+            overrides = cls.resource_config.get_service_overrides(service_name)
+            bind_service(service, cls, **overrides)
             # Add service to resource
             cls.__config_services__ += (service,)
             # Add service wrapped methods to resource manager
@@ -2938,11 +2976,16 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
         root_path: ResourcePath = cls._create_path()
         for path in root_path.walk(max_depth=max_depth):
             # Retrieve target resource endpoint methods
-            methods = path.target.objects._collect_methods(
-                scope='endpoint',
-                config=cls.resource_config.endpoints,
-            )
+            methods = path.target.objects._collect_methods(scope='endpoint')
             for method in methods.values():
+                # Skip if method should not be included
+                owner = getattr(method, '__config_owner__', None)
+                if isinstance(owner, BaseService):
+                    overrides = cls.resource_config \
+                        .get_service_overrides(owner.service_config.name)
+                    if not validate_service_method(method, overrides):
+                        continue
+                # Create resource endpoint
                 if endpoint := _create_resource_endpoint(
                     path, method, max_selection=max_selection
                 ):
