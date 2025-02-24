@@ -18,7 +18,7 @@ from .database.schema import Column, ForeignKey, Table
 from .errors import PlateformeError
 from .patterns import to_path_case
 from .representations import Representation
-from .runtime import Action, Lifecycle
+from .runtime import Action, Lifecycle, SchedulableState
 
 if typing.TYPE_CHECKING:
     from .resources import ResourceFieldInfo, ResourceType
@@ -344,24 +344,21 @@ class Association(Representation):
                         f"{self.alias!r} is not implemented in this resource."
                     )
 
-        # Schedule association relationships building
-        for count, (link_a, link_b) in enumerate(
-            zip((owner_link, target_link), (target_link, owner_link))
-        ):
-            # Skip if no link is provided
-            if link_a is None:
-                continue
+        # Schedule association relationships build
+        _build_relationship(
+            owner_link,
+            target_link,
+            self.table,
+            *columns,
+            when=Lifecycle.INITIALIZING,
+        )
 
-            # Resolve foreign keys configuration
-            if count == 0:
-                foreign_keys = columns
-            else:
-                foreign_keys = reversed(columns)
-
-            # Schedule relationship building
-            args = (link_a, link_b, self.table, *foreign_keys)
-            link_a.owner.__state__.schedule(
-                Action(_build_relationship, args=args),
+        if target_link is not None:
+            _build_relationship(
+                target_link,
+                owner_link,
+                self.table,
+                *reversed(columns),
                 when=Lifecycle.INITIALIZING,
             )
 
@@ -373,6 +370,7 @@ def _build_relationship(
     link_b: 'ResourceFieldInfo | None' = None,
     secondary: Table | None = None,
     *foreign_keys: Column[Any],
+    when: SchedulableState | None = None,
 ) -> None:
     """Build the relationship between two resources.
 
@@ -392,11 +390,22 @@ def _build_relationship(
         *foreign_keys: The foreign key columns that define the relationship
             between the two resources. This argument is required and must be
             a list containing the foreign key columns for the relationship.
+        when: Optional scheduling state to defer the relationship building
+            action. This argument is optional and defaults to ``None``.
     """
+    # Handle deferred relationship building
+    if when is not None:
+        args = (link_a, link_b, secondary, *foreign_keys)
+        link_a.owner.__state__.schedule(
+            Action(_build_relationship, args=args),
+            when=Lifecycle.INITIALIZING,
+        )
+        return
+
     # Handle table join and self-referential relationships
     assert isinstance(link_a.target, type)
     owner_id = link_a.owner.resource_attributes['id']
-    taget_id = link_a.target.resource_attributes['id']
+    target_id = link_a.target.resource_attributes['id']
     if secondary is None:
         assert len(foreign_keys) == 1
         primaryjoin = secondaryjoin = None
@@ -404,7 +413,7 @@ def _build_relationship(
     else:
         assert len(foreign_keys) == 2
         primaryjoin = foreign_keys[0] == owner_id
-        secondaryjoin = foreign_keys[1] == taget_id
+        secondaryjoin = foreign_keys[1] == target_id
         remote_side = None
 
     # Backref configuration
