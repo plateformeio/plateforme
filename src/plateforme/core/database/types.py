@@ -20,7 +20,17 @@ import typing
 import uuid
 from abc import ABCMeta, abstractmethod
 from collections.abc import Sequence
-from typing import Any, Callable, Dict, Literal, Tuple, Type, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Literal,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 from sqlalchemy.sql.operators import OperatorType as _OperatorType
 from sqlalchemy.sql.type_api import to_instance as _to_instance
@@ -87,6 +97,7 @@ __all__ = (
     'BaseTypeEngine',
     'TypeEngineMeta',
     'TypeEnginePayload',
+    'TypeEngineProcessors',
     'TypeEngine',
     'TypeEngineRules',
     # Concrete
@@ -130,6 +141,9 @@ __all__ = (
     'StringEngine',
     'TimeEngine',
     'UuidEngine',
+    # Utilities
+    'chain_processors',
+    'combine_processors',
     'combine_type_engines',
 )
 
@@ -143,16 +157,26 @@ TypeEngineRules = Dict[str, Callable[[Tuple[Any, Any]], Any]]
 
 
 class TypeEnginePayload(TypedDict, total=True):
-    """A typed dictionary used to store the arguments passed to a type engine.
+    """A dictionary used to store the arguments passed to a type engine."""
 
-    Attributes:
-        engine: The type engine.
-        arguments: The arguments passed to the type engine (``args`` and
-            ``kwargs``).
-    """
     engine: type['BaseTypeEngine[Any]']
-    arguments: dict[str, Any]
+    """The type engine."""
 
+    arguments: dict[str, Any]
+    """The arguments passed to the type engine (``args`` and ``kwargs``)."""
+
+
+class TypeEngineProcessors(TypedDict, Generic[_T], total=False):
+    """A dictionary used to store the type engine pre and post processors."""
+
+    before: Callable[[Any | None, Dialect], _T | None]
+    """A pre-processor for the incoming param data values."""
+
+    after: Callable[[_T | None, Dialect], Any | None]
+    """A post-processor for the data values being received in result rows."""
+
+
+# MARK: Type Engine Metaclass
 
 class TypeEngineMeta(ABCMeta):
     """The type engine metaclass.
@@ -160,13 +184,6 @@ class TypeEngineMeta(ABCMeta):
     The metaclass used to create a new type engines, while keeping track of the
     the parent and new type engine payloads arguments and keyword arguments
     implementations cascade.
-
-    Attributes:
-        payloads: A list of `TypeEnginePayload` instances used to determine the
-            order in which the parent and new type engines are called, along
-            with the arguments passed to each type engine.
-        rules: A dictionary containing corresponding rules for merging payloads
-            from two different instances of the new type engine.
     """
 
     def __new__(
@@ -186,59 +203,64 @@ class TypeEngineMeta(ABCMeta):
         if inspect.isabstract(cls):
             return cls
 
-        # Check if rules is implemented and is a dictionary
-        rules = getattr(cls, 'rules', None)
-        if rules is None or not callable(rules):
-            raise ValueError(
-                "Type engine must have a `rules` dictionary."
-            )
-        rules = rules()
+        # Retrieve type engine rules
+        namespace_rules = namespace.get('rules', lambda: {})
+        if not callable(namespace_rules):
+            raise ValueError("The rules attribute must be a callable.")
+        rules = namespace_rules()
         if not isinstance(rules, dict):
-            raise ValueError(
-                "Type engine must have a `rules` dictionary."
-            )
+            raise ValueError("The rules attribute must return a dictionary.")
 
-        # Check that all parameters from the "__init__" method signature have a
-        # rule assigned to them (except for "cls", "mcls", and "self").
-        init = namespace.get('__init__', None)
-        if init is not None:
-            signature = inspect.signature(init)
+        # Retrieve type engine "__init__" method
+        namespace_init = namespace.get('__init__', None)
+        if namespace_init is not None:
+            # Check that all parameters from the method signature have a rule
+            # assigned to them (except for "cls", "mcls", and "self").
+            signature = inspect.signature(namespace_init)
             parameters = [
                 param_name
                 for param_name in signature.parameters.keys()
                 if param_name not in ('cls', 'mcls', 'self')
             ]
             for parameter in parameters:
-                if parameter not in rules:
-                    raise ValueError(
-                        f"Missing rule for initialization parameter: "
-                        f"{parameter}."
-                    )
+                if parameter in rules:
+                    continue
+                raise ValueError(
+                    f"Missing rule for initialization parameter: "
+                    f"{parameter}."
+                )
 
-        # Update the "__init__" method payload
-        def init_and_store_payload(
+        # Update the namespace "__init__" method payload
+        def namespace_init_and_store_payload(
             self: BaseTypeEngine[Any],
             *args: Any,
             **kwargs: Any,
         ) -> None:
-            if init is not None:
-                signature = inspect.signature(init).bind(self, *args, **kwargs)
-                signature.apply_defaults()
-                self.payloads.append(TypeEnginePayload(
+            if namespace_init is None:
+                super(cls, self).__init__(*args, **kwargs)  # type: ignore
+            else:
+                signature = inspect.signature(namespace_init)
+                bound = signature.bind(self, *args, **kwargs)
+                bound.apply_defaults()
+                payloads = self.__dict__.get('_payloads', [])
+                payloads.append(TypeEnginePayload(
                     engine=cls,  # type: ignore
                     arguments={
                         key: value
-                        for key, value in signature.arguments.items()
+                        for key, value in bound.arguments.items()
                         if key not in ('cls', 'mcls', 'self')
                     }
                 ))
-                init(self, *args, **kwargs)
+                setattr(self, '_payloads', payloads)
+                namespace_init(self, *args, **kwargs)
 
         # Return the new type engine class
-        setattr(cls, '__init__', init_and_store_payload)
-        setattr(cls, 'payloads', list[TypeEnginePayload]())
+        setattr(cls, '__init__', namespace_init_and_store_payload)
+        setattr(cls, 'rules', namespace_rules)
         return cls
 
+
+# MARK: Type Engines
 
 class BaseTypeEngine(_TypeDecorator[_T], metaclass=TypeEngineMeta):
     """The base type engine.
@@ -377,9 +399,18 @@ class BaseTypeEngine(_TypeDecorator[_T], metaclass=TypeEngineMeta):
     """
     if typing.TYPE_CHECKING:
         impl: type[_TypeEngine[Any]]
-        payloads: list[TypeEnginePayload]
+        cache_ok: bool
 
-    def __init__(self, *args: Any, **kwargs: Any):
+        # An internal instance attribute used to determine the order in which
+        # the parent and new type engines are called, along with the arguments
+        # passed to each type engine.
+        _payloads: list[TypeEnginePayload]
+
+    def __init__(self,
+            __processors: TypeEngineProcessors[Any] | None = None,
+            *args: Any,
+            **kwargs: Any,
+        ) -> None:
         """Construct a type engine.
 
         Arguments sent here are passed to the constructor of the class assigned
@@ -391,17 +422,64 @@ class BaseTypeEngine(_TypeDecorator[_T], metaclass=TypeEngineMeta):
         be assigned to the same instance attribute "as-is", ignoring those
         arguments passed to the constructor.
 
-        Subclasses can override this to customize the generation of
-        ``self.impl`` entirely.
+        Args:
+            __processors: The type engine processors.
+            *args: Positional arguments passed to the constructor of the type
+                engine.
+            **kwargs: Keyword arguments passed to the constructor of the type
+                engine.
+
+        Note:
+            Subclasses can override this to customize the generation of
+            ``self.impl`` entirely.
         """
+        # Handle type engine processors
+        processors = __processors or {}
+        for key, processor in processors.items():
+            assert callable(processor)
+            if key == 'before':
+                self._update_processor('bind', processor)
+                self._update_processor('literal', processor)
+            elif key == 'after':
+                self._update_processor('result', processor)
+
         super().__init__(*args, **kwargs)
 
+    def _update_processor(
+        self,
+        name: Literal['bind', 'literal', 'result'],
+        processor: Callable[[Any | None, Dialect], Any | None],
+    ) -> None:
+        """Update the processor for the given name."""
+        check_name = f'_has_{name}_processor'
+        processor_name: str
+        processor_args: Callable[[Any], tuple[Any, Any]]
+
+        # Resolve processor name and arguments
+        if name == 'bind':
+            processor_name = 'process_bind_param'
+            processor_args = lambda x: (processor, x)
+        elif name == 'literal':
+            processor_name = 'process_literal_param'
+            processor_args = lambda x: (x, processor)
+        elif name == 'result':
+            processor_name = 'process_result_value'
+            processor_args = lambda x: (processor, x)
+        else:
+            raise ValueError(f"Unknown processor: {name}")
+
+        # Update processor
+        if getattr(self, check_name, False):
+            current = getattr(self, processor_name)
+            processor = chain_processors(*processor_args(current))
+        setattr(self, check_name, True)
+        setattr(self, processor_name, processor)
+
     @staticmethod
-    @abstractmethod
     def rules() -> TypeEngineRules:
         """The rules for merging payloads from two different type engines.
 
-        Return a dictionary containing the selection rules for all the
+        It returns a dictionary containing the selection rules for all the
         parameters that can be passed to the constructor of the type engine.
 
         Each key of the dictionary is the name of a parameter and the value is
@@ -410,7 +488,7 @@ class BaseTypeEngine(_TypeDecorator[_T], metaclass=TypeEngineMeta):
         two.
         """
         # Implement custom logic to decide how to merge payloads...
-        ...
+        raise NotImplementedError()
 
     @abstractmethod
     def coarse_type_engine(
@@ -432,6 +510,8 @@ class BaseTypeEngine(_TypeDecorator[_T], metaclass=TypeEngineMeta):
         ...
 
 
+# MARK:> Binary
+
 class BinaryEngine(BaseTypeEngine[bytes]):
     """A binary engine.
 
@@ -442,19 +522,28 @@ class BinaryEngine(BaseTypeEngine[bytes]):
     impl: type[_Binary] = _LargeBinary
     cache_ok = True
 
-    def __init__(self, length: int | None = None):
+    def __init__(
+        self,
+        length: int | None = None,
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         """Construct a binary engine.
 
         Args:
             length: A length for the column for use in DDL statements, for
                 those binary types that accept a length, such as the MySQL
                 ``BLOB`` type.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
-        super().__init__(length)
+        super().__init__(processors, length)
 
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'length': lambda x: max(
                 (i for i in x if i is not None),
                 default=None,
@@ -469,6 +558,8 @@ class BinaryEngine(BaseTypeEngine[bytes]):
     ) -> Any:
         return self.impl.coerce_compared_value(op, value)  # type: ignore
 
+
+# MARK:> Boolean
 
 class BooleanEngine(BaseTypeEngine[bool]):
     """A boolean engine.
@@ -490,6 +581,8 @@ class BooleanEngine(BaseTypeEngine[bool]):
         self,
         create_constraint: bool = False,
         name: str | None = None,
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
     ) -> None:
         """Construct a boolean engine.
 
@@ -499,12 +592,16 @@ class BooleanEngine(BaseTypeEngine[bool]):
                 that ensures ``1`` or ``0`` as a value.
             name: If a ``CHECK`` constraint is generated, specify the name of
                 the constraint.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
-        super().__init__(create_constraint, name)
+        super().__init__(processors, create_constraint, name)
 
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'create_constraint': lambda x: any(x),
             'name': lambda x: x[0] or x[1],
         }
@@ -512,6 +609,8 @@ class BooleanEngine(BaseTypeEngine[bool]):
     def coarse_type_engine(self, /, **kwargs: Any) -> BaseTypeEngine[Any]:
         return JsonEngine()
 
+
+# MARK:> Date
 
 class DateEngine(BaseTypeEngine[datetime.date]):
     """A date engine.
@@ -521,17 +620,29 @@ class DateEngine(BaseTypeEngine[datetime.date]):
     impl: type[_Date] = _Date
     cache_ok = True
 
-    def __init__(self) -> None:
-        """Construct a date engine."""
-        super().__init__()
+    def __init__(
+        self,
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
+        """Construct a date engine.
+
+        Args:
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
+        """
+        super().__init__(processors)
 
     @staticmethod
     def rules() -> TypeEngineRules:
-        return {}
+        return {'processors': lambda x: combine_processors(*x)}
 
     def coarse_type_engine(self, /, **kwargs: Any) -> BaseTypeEngine[Any]:
         return DateTimeEngine()
 
+
+# MARK:> Date Time
 
 class DateTimeEngine(BaseTypeEngine[datetime.datetime]):
     """A datetime engine.
@@ -549,22 +660,35 @@ class DateTimeEngine(BaseTypeEngine[datetime.datetime]):
     impl: type[_DateTime] = _DateTime
     cache_ok = True
 
-    def __init__(self, timezone: bool = False) -> None:
+    def __init__(
+        self,
+        timezone: bool = False,
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         """Construct a datetime engine.
 
         Args:
             timezone: Indicates that the datetime type should enable timezone
                 support, if available on the base date/time-holding type only.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
-        super().__init__(timezone)
+        super().__init__(processors, timezone)
 
     @staticmethod
     def rules() -> TypeEngineRules:
-        return {'timezone': lambda x: any(x)}
+        return {
+            'processors': lambda x: combine_processors(*x),
+            'timezone': lambda x: any(x),
+        }
 
     def coarse_type_engine(self, /, **kwargs: Any) -> BaseTypeEngine[Any]:
         return JsonEngine()
 
+
+# MARK:> Enum
 
 class EnumEngine(BaseTypeEngine[str | enum.Enum]):
     """An enumeration engine.
@@ -631,7 +755,8 @@ class EnumEngine(BaseTypeEngine[str | enum.Enum]):
         values_callable: Callable[[Any], list[str]] | None = None,
         sort_key_function: Callable[[Any], Any] | None = None,
         omit_aliases: bool = True,
-    ):
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         """Construct an enum.
 
         Keyword arguments which don't apply to a specific backend are ignored
@@ -694,8 +819,12 @@ class EnumEngine(BaseTypeEngine[str | enum.Enum]):
                 the sorting function.
             omit_aliases: A boolean that when true will remove aliases from
                 PEP-435 enums.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
         super().__init__(
+            processors,
             *enums,
             create_constraint=create_constraint,
             metadata=metadata,
@@ -714,6 +843,7 @@ class EnumEngine(BaseTypeEngine[str | enum.Enum]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'enums': lambda x: x[0] + x[1],
             'create_constraint': lambda x: any(x),
             'metadata': lambda x: x[0] or x[1],
@@ -736,6 +866,8 @@ class EnumEngine(BaseTypeEngine[str | enum.Enum]):
         return StringEngine()
 
 
+# MARK:> Integer
+
 class IntegerEngine(BaseTypeEngine[int]):
     """An integer engine.
 
@@ -745,17 +877,29 @@ class IntegerEngine(BaseTypeEngine[int]):
     impl: type[_Integer] = _Integer
     cache_ok = True
 
-    def __init__(self) -> None:
-        """Construct an integer engine."""
-        super().__init__()
+    def __init__(
+        self,
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
+        """Construct an integer engine.
+
+        Args:
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
+        """
+        super().__init__(processors)
 
     @staticmethod
     def rules() -> TypeEngineRules:
-        return {}
+        return {'processors': lambda x: combine_processors(*x)}
 
     def coarse_type_engine(self, /, **kwargs: Any) -> BaseTypeEngine[Any]:
         return NumericEngine()
 
+
+# MARK:> Interval
 
 class IntervalEngine(BaseTypeEngine[datetime.timedelta]):
     """An interval engine.
@@ -778,7 +922,9 @@ class IntervalEngine(BaseTypeEngine[datetime.timedelta]):
         native: bool = True,
         second_precision: int | None = None,
         day_precision: int | None = None,
-    ):
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         """Construct an interval engine.
 
         Args:
@@ -790,12 +936,16 @@ class IntervalEngine(BaseTypeEngine[datetime.timedelta]):
                 "fractional seconds precision" parameter (PostgreSQL, Oracle).
             day_precision: For native interval types which support a
                 "day precision" parameter (Oracle).
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
-        super().__init__(native, second_precision, day_precision)
+        super().__init__(processors, native, second_precision, day_precision)
 
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'native': lambda x: all(x),
             'second_precision': lambda x: max(
                 (i for i in x if i is not None),
@@ -816,6 +966,8 @@ class IntervalEngine(BaseTypeEngine[datetime.timedelta]):
         return self.impl.coerce_compared_value(op, value)  # type: ignore
 
 
+# MARK:> JSON
+
 class JsonEngine(BaseTypeEngine[_T]):
     """A json engine.
 
@@ -830,7 +982,12 @@ class JsonEngine(BaseTypeEngine[_T]):
     impl: type[_TypeEngine[Any]] = _String
     cache_ok = True
 
-    def __init__(self, none_as_null: bool = True):
+    def __init__(
+        self,
+        none_as_null: bool = True,
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         """
         Construct a json engine.
 
@@ -841,6 +998,9 @@ class JsonEngine(BaseTypeEngine[_T]):
                 used to persist a ``NULL`` value, which may be passed directly
                 as a parameter value that is specially interpreted by the
                 `JSON` type as SQL ``NULL``.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
 
         Examples:
             >>> from plateforme.database import null
@@ -858,11 +1018,12 @@ class JsonEngine(BaseTypeEngine[_T]):
             ``JSON.NULL`` value should be used for SQL expressions that wish to
             compare to JSON null.
         """
-        super().__init__(none_as_null)
+        super().__init__(processors, none_as_null)
 
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'none_as_null': lambda x: any(x),
         }
 
@@ -901,6 +1062,8 @@ class JsonEngine(BaseTypeEngine[_T]):
         return None
 
 
+# MARK:> Numeric
+
 class NumericEngine(BaseTypeEngine[_TNumber]):
     """A numeric engine.
 
@@ -926,7 +1089,9 @@ class NumericEngine(BaseTypeEngine[_TNumber]):
         scale: int | None = ...,
         asdecimal: Literal[False] = ...,
         decimal_return_scale: int | None = ...,
-    ):
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         ...
 
     @typing.overload
@@ -936,7 +1101,9 @@ class NumericEngine(BaseTypeEngine[_TNumber]):
         scale: int | None = ...,
         asdecimal: Literal[True] = ...,
         decimal_return_scale: int | None = ...,
-    ):
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         ...
 
     def __init__(
@@ -945,7 +1112,9 @@ class NumericEngine(BaseTypeEngine[_TNumber]):
         scale: int | None = None,
         asdecimal: bool = False,
         decimal_return_scale: int | None = None,
-    ):
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         """Construct a numeric engine.
 
         Args:
@@ -966,6 +1135,9 @@ class NumericEngine(BaseTypeEngine[_TNumber]):
                 as the base `Numeric` as well as the MySQL float types, will
                 use the value of `scale` as the default for
                 `decimal_return_scale`, if not otherwise specified.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
 
         When using the `NumericEngine`, care should be taken to ensure that the
         `asdecimal` setting is appropriate for the DBAPI in use. When base
@@ -983,6 +1155,7 @@ class NumericEngine(BaseTypeEngine[_TNumber]):
         ``asdecimal=False`` will at least remove the extra conversion overhead.
         """
         super().__init__(
+            processors,
             precision,
             scale,
             decimal_return_scale,
@@ -992,6 +1165,7 @@ class NumericEngine(BaseTypeEngine[_TNumber]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'precision': lambda x: max(
                 (i for i in x if i is not None),
                 default=None,
@@ -1010,6 +1184,8 @@ class NumericEngine(BaseTypeEngine[_TNumber]):
     def coarse_type_engine(self, /, **kwargs: Any) -> BaseTypeEngine[Any]:
         return StringEngine()
 
+
+# MARK:> Pickle
 
 class PickleEngine(BaseTypeEngine[object]):
     """A piclke engine for Python objects.
@@ -1031,6 +1207,8 @@ class PickleEngine(BaseTypeEngine[object]):
         pickler: Any | None = None,
         comparator: Callable[[Any, Any], bool] | None= None,
         impl: '_TEngine[Any] | None' = None,
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
     ) -> None:
         """Construct a piclke engine.
 
@@ -1044,8 +1222,11 @@ class PickleEngine(BaseTypeEngine[object]):
             impl: A binary-storing `BaseTypeEngine` class or instance to use in
                 place of the default `Binary` type. For example the `BLOB`
                 class may be more effective when using MySQL.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
-        super().__init__()
+        super().__init__(processors)
         self.protocol = protocol
         self.pickler = pickler or pickle
         self.comparator = comparator
@@ -1054,12 +1235,10 @@ class PickleEngine(BaseTypeEngine[object]):
         if impl:
             self.impl = _to_instance(impl)  # type: ignore
 
-    def __reduce__(self) -> tuple[type['PickleEngine'], tuple[Any, ...]]:
-        return PickleEngine, (self.protocol, None, self.comparator)
-
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'protocol': lambda x: x[0] or x[1],
             'pickler': lambda x: x[0] or x[1],
             'comparator': lambda x: x[0] or x[1],
@@ -1113,6 +1292,11 @@ class PickleEngine(BaseTypeEngine[object]):
         else:
             return x == y  # type: ignore
 
+    def __reduce__(self) -> tuple[type['PickleEngine'], tuple[Any, ...]]:
+        return PickleEngine, (self.protocol, None, self.comparator)
+
+
+# MARK:> String
 
 class StringEngine(BaseTypeEngine[str]):
     """A string engine.
@@ -1128,7 +1312,9 @@ class StringEngine(BaseTypeEngine[str]):
         self,
         length: int | None = None,
         collation: str | None = None,
-    ):
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         """Construct a string engine.
 
         Args:
@@ -1142,6 +1328,9 @@ class StringEngine(BaseTypeEngine[str]):
                 SQLite, MySQL, and PostgreSQL. If `collation` is equal to
                 ``ascii``, `VARCHAR` and related types will be used. Otherwise,
                 `NVARCHAR` and related types will be used.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
         if self.impl is None:
             if collation == 'ascii':
@@ -1154,11 +1343,12 @@ class StringEngine(BaseTypeEngine[str]):
                     self.impl = _Unicode
                 else:
                     self.impl = _UnicodeText
-        super().__init__(length, collation)
+        super().__init__(processors, length, collation)
 
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'length': lambda x: max(
                 (i for i in x if i is not None),
                 default=None,
@@ -1170,6 +1360,8 @@ class StringEngine(BaseTypeEngine[str]):
         return JsonEngine()
 
 
+# MARK:> Time
+
 class TimeEngine(BaseTypeEngine[datetime.time]):
     """A time engine.
 
@@ -1178,19 +1370,27 @@ class TimeEngine(BaseTypeEngine[datetime.time]):
     impl: type[_Time] = _Time
     cache_ok = True
 
-    def __init__(self) -> None:
+    def __init__(
+        self, *, processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
+        """Construct a time engine.
+
+        Args:
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
-        Construct a time engine.
-        """
-        super().__init__()
+        super().__init__(processors)
 
     @staticmethod
     def rules() -> TypeEngineRules:
-        return {}
+        return {'processors': lambda x: combine_processors(*x)}
 
     def coarse_type_engine(self, /, **kwargs: Any) -> BaseTypeEngine[Any]:
         return DateTimeEngine()
 
+
+# MARK:> UUID
 
 class UuidEngine(BaseTypeEngine[_TUuid]):
     """A UUID engine.
@@ -1214,7 +1414,9 @@ class UuidEngine(BaseTypeEngine[_TUuid]):
         self,
         as_uuid: bool = True,
         native_uuid: bool = True,
-    ):
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         """Construct a UUID engine.
 
         Args:
@@ -1225,12 +1427,16 @@ class UuidEngine(BaseTypeEngine[_TUuid]):
                 Server's ``UNIQUEIDENTIFIER`` will be used by those backends.
                 If ``False``, a ``CHAR(32)`` datatype will be used for all
                 backends regardless of native support.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
-        super().__init__(as_uuid, native_uuid)
+        super().__init__(processors, as_uuid, native_uuid)
 
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'as_uuid': lambda x: all(x),
             'native_uuid': lambda x: all(x),
         }
@@ -1244,6 +1450,8 @@ class UuidEngine(BaseTypeEngine[_TUuid]):
         return self.impl.coerce_compared_value(op, value)  # type: ignore
 
 
+# MARK:> Default
+
 DefaultEngine: BaseTypeEngine[Any] = \
     Mutable.as_mutable(JsonEngine())  # type: ignore
 """Default type engine.
@@ -1252,6 +1460,8 @@ It should be used by fields that do not have a specific type engine defined and
 for which no type engine can be resolved.
 """
 
+
+# MARK: Concrete Types
 
 class ARRAY(BaseTypeEngine[Sequence[Any]]):
     """The SQL ARRAY concrete type.
@@ -1271,7 +1481,9 @@ class ARRAY(BaseTypeEngine[Sequence[Any]]):
         as_tuple: bool = False,
         dimensions: int | None = None,
         zero_indexes: bool = False,
-    ):
+        *,
+        processors: TypeEngineProcessors[_T] | None = None,
+    ) -> None:
         """Construct an ARRAY type.
 
         Args:
@@ -1291,12 +1503,18 @@ class ARRAY(BaseTypeEngine[Sequence[Any]]):
                 Python zero-based and SQL one-based indexes, e.g. a value of
                 one will be added to all index values before passing to the
                 database.
+            processors: The type engine processors used to transform the
+                incoming and outgoing data values before and after they are
+                passed to the database. Defaults to ``None``.
         """
-        super().__init__(item_type, as_tuple, dimensions, zero_indexes)
+        super().__init__(
+            processors, item_type, as_tuple, dimensions, zero_indexes
+        )
 
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
+            'processors': lambda x: combine_processors(*x),
             'item_type': lambda x: (x[0] | x[1]),
             'as_tuple': lambda x: any(x),
             'dimensions': lambda x: max(
@@ -1440,6 +1658,48 @@ class VARCHAR(StringEngine):
     impl = _VARCHAR
 
 
+# MARK: Utilities
+
+def chain_processors(
+    *processors: Callable[[Any | None, Dialect], Any | None],
+) -> Callable[[Any | None, Dialect], Any | None]:
+    """Chain processors.
+
+    Args:
+        processors: The processors to chain.
+
+    Returns:
+        A new processor that is the chaining of the given processors.
+    """
+    def wrapper(value: Any | None, dialect: Dialect) -> Any | None:
+        result = value
+        for processor in processors:
+            result = processor(result, dialect)
+        return result
+    return wrapper
+
+
+def combine_processors(
+    *processors: Callable[[Any | None, Dialect], Any | None],
+) -> Callable[[Any | None, Dialect], Any | None]:
+    """Combine processors.
+
+    Args:
+        processors: The processors to combine.
+
+    Returns:
+        A new processor that is the combination of the given processors.
+    """
+    def wrapper(value: Any | None, dialect: Dialect) -> Any | None:
+        for processor in processors:
+            try:
+                return processor(value, dialect)
+            except Exception:
+                pass
+        raise ValueError("No processor could handle the given arguments.")
+    return wrapper
+
+
 def combine_type_engines(
     *engines: '_TEngine[Any]',
     **kwargs: Any,
@@ -1470,8 +1730,8 @@ def combine_type_engines(
     # Initialize the hierarchy and payloads for each engine
     hierarchy_a = [engine_a]
     hierarchy_b = [engine_b]
-    payloads_a = engine_a.payloads
-    payloads_b = engine_b.payloads
+    payloads_a = engine_a._payloads
+    payloads_b = engine_b._payloads
 
     # Initialize the common payload to None
     class CommonPayload(TypedDict):
@@ -1511,7 +1771,7 @@ def combine_type_engines(
                             f"Circular reference detected for type engine "
                             f"{hierarchy[-1].__class__.__name__!r}."
                         )
-                    payloads.extend(coarser.payloads)
+                    payloads.extend(coarser._payloads)
                     return True
                 return False
 
