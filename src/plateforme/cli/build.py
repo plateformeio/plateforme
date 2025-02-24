@@ -24,8 +24,9 @@ app = typer.Typer()
 def build(ctx: Context) -> None:
     """Build the plateforme project application."""
     config, project, project_app = ctx.obj.get_app_config()
+    project_target = '%s:%s' % (project.name, project_app)
 
-    logger.info(f"Building application... (from {project}:{project_app})")
+    logger.info(f"Building application... (from {project_target})")
 
     if config.build is None:
         logger.warning(f"No build command found")

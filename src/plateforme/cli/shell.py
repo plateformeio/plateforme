@@ -65,8 +65,9 @@ def shell(
     standard input is executed as code.
     """
     config, project, project_app = ctx.obj.get_app_config()
+    project_target = '%s:%s' % (project.name, project_app)
 
-    logger.info(f"Starting shell... (from {project}:{project_app})")
+    logger.info(f"Starting shell... (from {project_target})")
 
     import plateforme
 

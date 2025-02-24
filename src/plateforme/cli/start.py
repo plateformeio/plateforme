@@ -51,8 +51,9 @@ def start(
         raise typer.Exit()
 
     config, project, project_app = ctx.obj.get_app_config()
+    project_target = '%s:%s' % (project.name, project_app)
 
-    logger.info(f"Starting application... (from {project}:{project_app})")
+    logger.info(f"Starting application... (from {project_target})")
 
     command = ['uvicorn', *config.start.split()]
     command.extend(nargs or [])

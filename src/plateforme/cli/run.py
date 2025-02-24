@@ -27,8 +27,9 @@ def run(
 ) -> None:
     """Run the plateforme project script."""
     config, project, project_app = ctx.obj.get_app_config()
+    project_target = '%s:%s' % (project.name, project_app)
 
-    logger.info(f"Running project script...(from {project}:{project_app})")
+    logger.info(f"Running project script...(from {project_target})")
 
     if not config.scripts or script not in config.scripts:
         logger.warning(f"No script found for {script!r}")
