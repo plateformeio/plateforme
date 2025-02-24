@@ -142,9 +142,8 @@ __all__ = (
     'TimeEngine',
     'UuidEngine',
     # Utilities
-    'chain_processors',
-    'combine_processors',
     'combine_type_engines',
+    'combine_type_engines_processors',
 )
 
 
@@ -169,10 +168,10 @@ class TypeEnginePayload(TypedDict, total=True):
 class TypeEngineProcessors(TypedDict, Generic[_T], total=False):
     """A dictionary used to store the type engine pre and post processors."""
 
-    before: Callable[[Any | None, Dialect], _T | None]
+    before: Callable[[Any | None, Dialect], _T | None] | None
     """A pre-processor for the incoming param data values."""
 
-    after: Callable[[_T | None, Dialect], Any | None]
+    after: Callable[[_T | None, Dialect], Any | None] | None
     """A post-processor for the data values being received in result rows."""
 
 
@@ -436,6 +435,8 @@ class BaseTypeEngine(_TypeDecorator[_T], metaclass=TypeEngineMeta):
         # Handle type engine processors
         processors = __processors or {}
         for key, processor in processors.items():
+            if processor is None:
+                continue
             assert callable(processor)
             if key == 'before':
                 self._update_processor('bind', processor)
@@ -471,7 +472,7 @@ class BaseTypeEngine(_TypeDecorator[_T], metaclass=TypeEngineMeta):
         # Update processor
         if getattr(self, check_name, False):
             current = getattr(self, processor_name)
-            processor = chain_processors(*processor_args(current))
+            processor = _chain_processors(*processor_args(current))
         setattr(self, check_name, True)
         setattr(self, processor_name, processor)
 
@@ -543,7 +544,7 @@ class BinaryEngine(BaseTypeEngine[bytes]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'length': lambda x: max(
                 (i for i in x if i is not None),
                 default=None,
@@ -601,7 +602,7 @@ class BooleanEngine(BaseTypeEngine[bool]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'create_constraint': lambda x: any(x),
             'name': lambda x: x[0] or x[1],
         }
@@ -636,7 +637,7 @@ class DateEngine(BaseTypeEngine[datetime.date]):
 
     @staticmethod
     def rules() -> TypeEngineRules:
-        return {'processors': lambda x: combine_processors(*x)}
+        return {'processors': lambda x: combine_type_engines_processors(*x)}
 
     def coarse_type_engine(self, /, **kwargs: Any) -> BaseTypeEngine[Any]:
         return DateTimeEngine()
@@ -680,7 +681,7 @@ class DateTimeEngine(BaseTypeEngine[datetime.datetime]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'timezone': lambda x: any(x),
         }
 
@@ -843,7 +844,7 @@ class EnumEngine(BaseTypeEngine[str | enum.Enum]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'enums': lambda x: x[0] + x[1],
             'create_constraint': lambda x: any(x),
             'metadata': lambda x: x[0] or x[1],
@@ -893,7 +894,7 @@ class IntegerEngine(BaseTypeEngine[int]):
 
     @staticmethod
     def rules() -> TypeEngineRules:
-        return {'processors': lambda x: combine_processors(*x)}
+        return {'processors': lambda x: combine_type_engines_processors(*x)}
 
     def coarse_type_engine(self, /, **kwargs: Any) -> BaseTypeEngine[Any]:
         return NumericEngine()
@@ -945,7 +946,7 @@ class IntervalEngine(BaseTypeEngine[datetime.timedelta]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'native': lambda x: all(x),
             'second_precision': lambda x: max(
                 (i for i in x if i is not None),
@@ -1023,7 +1024,7 @@ class JsonEngine(BaseTypeEngine[_T]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'none_as_null': lambda x: any(x),
         }
 
@@ -1165,7 +1166,7 @@ class NumericEngine(BaseTypeEngine[_TNumber]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'precision': lambda x: max(
                 (i for i in x if i is not None),
                 default=None,
@@ -1238,7 +1239,7 @@ class PickleEngine(BaseTypeEngine[object]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'protocol': lambda x: x[0] or x[1],
             'pickler': lambda x: x[0] or x[1],
             'comparator': lambda x: x[0] or x[1],
@@ -1348,7 +1349,7 @@ class StringEngine(BaseTypeEngine[str]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'length': lambda x: max(
                 (i for i in x if i is not None),
                 default=None,
@@ -1384,7 +1385,7 @@ class TimeEngine(BaseTypeEngine[datetime.time]):
 
     @staticmethod
     def rules() -> TypeEngineRules:
-        return {'processors': lambda x: combine_processors(*x)}
+        return {'processors': lambda x: combine_type_engines_processors(*x)}
 
     def coarse_type_engine(self, /, **kwargs: Any) -> BaseTypeEngine[Any]:
         return DateTimeEngine()
@@ -1436,7 +1437,7 @@ class UuidEngine(BaseTypeEngine[_TUuid]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'as_uuid': lambda x: all(x),
             'native_uuid': lambda x: all(x),
         }
@@ -1514,7 +1515,7 @@ class ARRAY(BaseTypeEngine[Sequence[Any]]):
     @staticmethod
     def rules() -> TypeEngineRules:
         return {
-            'processors': lambda x: combine_processors(*x),
+            'processors': lambda x: combine_type_engines_processors(*x),
             'item_type': lambda x: (x[0] | x[1]),
             'as_tuple': lambda x: any(x),
             'dimensions': lambda x: max(
@@ -1660,18 +1661,13 @@ class VARCHAR(StringEngine):
 
 # MARK: Utilities
 
-def chain_processors(
+def _chain_processors(
     *processors: Callable[[Any | None, Dialect], Any | None],
 ) -> Callable[[Any | None, Dialect], Any | None]:
-    """Chain processors.
-
-    Args:
-        processors: The processors to chain.
-
-    Returns:
-        A new processor that is the chaining of the given processors.
-    """
+    """Chain processors."""
     def wrapper(value: Any | None, dialect: Dialect) -> Any | None:
+        if not processors:
+            return value
         result = value
         for processor in processors:
             result = processor(result, dialect)
@@ -1679,18 +1675,13 @@ def chain_processors(
     return wrapper
 
 
-def combine_processors(
+def _combine_processors(
     *processors: Callable[[Any | None, Dialect], Any | None],
 ) -> Callable[[Any | None, Dialect], Any | None]:
-    """Combine processors.
-
-    Args:
-        processors: The processors to combine.
-
-    Returns:
-        A new processor that is the combination of the given processors.
-    """
+    """Combine processors."""
     def wrapper(value: Any | None, dialect: Dialect) -> Any | None:
+        if not processors:
+            return value
         for processor in processors:
             try:
                 return processor(value, dialect)
@@ -1797,3 +1788,35 @@ def combine_type_engines(
         ))
     engine = common_engine(**common_arguments)
     return combine_type_engines(engine, *engines_remaining, **kwargs)
+
+
+def combine_type_engines_processors(
+    *engines: TypeEngineProcessors[_T] | None,
+) -> TypeEngineProcessors[_T] | None:
+    """Combine type engines processors.
+
+    Args:
+        engines: The type engines processors to combine.
+
+    Returns:
+        A new type engines processors that is the combination of the given
+        type engines processors.
+    """
+    # Helper function to extract and combine processors
+    def extract_and_combine(
+        key: str
+    ) -> Callable[[Any | None, Dialect], Any | None]:
+        processors = []
+        for engine in engines:
+            if engine is None:
+                continue
+            processor = engine.get(key, None)
+            if processor is None:
+                continue
+            processors.append(processor)
+        return _combine_processors(*processors) if processors else None
+
+    return TypeEngineProcessors(
+        before=extract_and_combine('before'),
+        after=extract_and_combine('after'),
+    )
