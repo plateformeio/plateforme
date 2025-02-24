@@ -1906,13 +1906,13 @@ def _init_base_model_and_configuration(
     model_name = 'Model'
     model_qualname = f'{cls.__qualname__}.Model'
 
-    model_bases = (BaseModel,)
+    model_bases: tuple[ModelType, ...] = ()
     for base in bases:
         model_base = getattr(base, 'Model', None)
-        if not model_base or not issubclass(model_base, BaseModel):
-            continue
-        model_bases = (model_base,)
-        break
+        if model_base and issubclass(model_base, BaseModel):
+            model_bases += (model_base,)
+    if not model_bases:
+        model_bases = (BaseModel,)
 
     model_namespace: dict[str, Any] = {
         **fields_namespace,
