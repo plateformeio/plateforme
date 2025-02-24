@@ -150,7 +150,8 @@ def resolve_data_type_engine(
         # Check for string and enum annotations (enum must be checked first
         # as it can also be a subclass of a string)
         if issubclass(annotation, enum.Enum):
-            return EnumFactory.__get_sqlalchemy_data_type__(**kwargs)
+            enums = [enum.value for enum in annotation]
+            return EnumFactory.__get_sqlalchemy_data_type__(*enums, **kwargs)
         if issubclass(annotation, str):
             return StringFactory.__get_sqlalchemy_data_type__(**kwargs)
 

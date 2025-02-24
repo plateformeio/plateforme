@@ -59,7 +59,9 @@ else:
                 return core_schema.json_schema(handler(source))
 
         @classmethod
-        def __get_sqlalchemy_data_type__(cls, **kwargs: Any) -> JsonEngine:
+        def __get_sqlalchemy_data_type__(
+            cls, **kwargs: Any
+        ) -> JsonEngine[_T]:
             return JsonEngine(
                 none_as_null=kwargs.get('data_none_as_null', True),
             )

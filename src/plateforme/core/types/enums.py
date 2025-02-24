@@ -33,9 +33,11 @@ class EnumFactory(BaseTypeFactory[enum.Enum]):
     """
 
     @classmethod
-    def __get_sqlalchemy_data_type__(cls, **kwargs: Any) -> EnumEngine:
+    def __get_sqlalchemy_data_type__(
+        cls, *enums: Any, **kwargs: Any,
+    ) -> EnumEngine:
         return EnumEngine(
-            *kwargs.get('enums', ()),
+            *enums,
             create_constraint=kwargs.get('create_constraint', False),
             metadata=kwargs.get('metadata', None),
             name=kwargs.get('name', None),

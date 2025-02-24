@@ -22,13 +22,10 @@ from typing import (
 )
 
 from ..database.types import BaseTypeEngine
-from ..schema import core as core_schema
 from ..schema.core import (
     CoreSchema,
     GetCoreSchemaHandler,
     GetJsonSchemaHandler,
-    SerializationInfo,
-    ValidationInfo,
 )
 from ..schema.json import JsonSchemaDict
 from ..schema.types import Strict
@@ -163,10 +160,10 @@ class BaseTypeFactory(type, Generic[_T]):
                 f"The type keyword argument must be a subclass of the factory "
                 f"type. Got {type_!r} instead of {cls.type_!r}."
             )
-        type_new = type_ or cls.type_
+        type_ = type_ or cls.type_
 
         # Check if new type is a subclass of base type
-        if not issubclass(type_new, BaseType) and not force_build:
+        if not issubclass(type_, BaseType) and not force_build:
             raise TypeError(
                 "Base type factory can only be used with base types when "
                 "force build is not enabled."
@@ -178,7 +175,7 @@ class BaseTypeFactory(type, Generic[_T]):
                 (Strict(bool(strict)) if strict is not None else None,)
 
         return Annotated[  # type: ignore[return-value]
-            type_new, cls, *annotations
+            type_, cls, *annotations
         ]
 
 
@@ -200,24 +197,7 @@ class BaseType(metaclass=TypeMeta):
         __source: type[Self],
         __handler: GetCoreSchemaHandler,
     ) -> CoreSchema:
-        # Retrieve core schema
-        schema = __handler(__source)
-        # Check if the method is overridden and handle type custom validator
-        if cls.validate.__code__ is not BaseType.validate.__code__:
-            schema = core_schema.with_info_after_validator_function(
-                cls.validate,
-                schema,
-            )
-        # Check if the method is overridden and handle type custom serializer
-        if cls.serialize.__code__ is not BaseType.serialize.__code__:
-            schema['serialization'] = (  # type: ignore[index]
-                core_schema.plain_serializer_function_ser_schema(
-                    cls.serialize,
-                    is_field_serializer=True,
-                    info_arg=True,
-                )
-            )
-        return schema
+        return __handler(__source)
 
     @classmethod
     def __get_pydantic_json_schema__(
@@ -225,77 +205,10 @@ class BaseType(metaclass=TypeMeta):
         __core_schema: CoreSchema,
         __handler: GetJsonSchemaHandler,
     ) -> JsonSchemaDict:
-        schema = __handler(__core_schema)
-        return schema
+        return __handler(__core_schema)
 
     @classmethod
     def __get_sqlalchemy_data_type__(
         cls, **kwargs: Any
     ) -> BaseTypeEngine[Any] | None:
         return None
-
-    @classmethod
-    def validate(
-        cls, __value: Any, info: ValidationInfo | None = None
-    ) -> Self:
-        """Validate value and return a new instance of the type.
-
-        Args:
-            __value: Value to validate.
-            info: Addition information to pass to the validator.
-                Defaults to ``None``.
-
-        Returns:
-            A type initialized with validated `value`.
-
-        Examples:
-            >>> class MyType(BaseType, int):
-            ...     @classmethod
-            ...     def validate(cls, value: Any) -> Self:
-            ...         if value < 0:
-            ...             raise ValueError('Value must be positive.')
-            ...         return cls(value)
-            >>> MyType(1)
-            1
-            >>> MyType(-1)
-            ValueError: Value must be positive.
-
-        Note:
-            Override and add validation logic here, if necessary. The
-            validation is performed after the schema validation. For more
-            complex logic, you may want to override the
-            `__get_pydantic_core_schema__` and `__get_pydantic_json_schema__`
-            methods directly.
-        """
-        return cls(__value)
-
-    @classmethod
-    def serialize(
-        cls, __value: Self, info: SerializationInfo | None = None
-    ) -> Any:
-        """Return the serialized instance of the type.
-
-        Args:
-            __value: Value to serialize.
-            info: Additional information to pass to the serializer.
-                Defaults to ``None``.
-
-        Returns:
-            A serialized instance.
-
-        Examples:
-            >>> class MyType(BaseType, int):
-            ...     @classmethod
-            ...     def serialize(cls, value: Self) -> str:
-            ...         return f"Serialized {self!r}"
-
-        Note:
-            Override and add serialization logic here, if necessary. The
-            serialization to be invoked is set up in the schema. For more
-            complex logic, you may want to override the
-            `__get_pydantic_core_schema__` and `__get_pydantic_json_schema__`
-            methods directly.
-        """
-        if info and info.mode == 'json':
-            return __value.__str__()
-        return __value

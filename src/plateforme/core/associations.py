@@ -435,7 +435,7 @@ def _build_relationship(
     elif link_a.collection == 'set':
         collection_class = InstrumentedSet
     else:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     # Loading configuration
     if link_a.rel_load is not True:
