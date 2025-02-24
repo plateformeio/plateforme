@@ -11,88 +11,114 @@ framework leveraging Pydantic schemas for validation and serialization, and
 compatibility with SQLAlchemy's data type system.
 """
 
-from typing import Any, Generic, Self, TypeVar
+import typing
+from typing import Any, ClassVar, Generic, Self, TypeVar
 
-from ..database.types import BaseTypeEngine, BinaryEngine, StringEngine
+from ..database.types import (
+    BaseTypeEngine,
+    BinaryEngine,
+    JsonEngine,
+    StringEngine,
+)
 from ..schema import core as core_schema
 from ..schema.core import (
     CoreSchema,
     GetCoreSchemaHandler,
     GetJsonSchemaHandler,
+    SchemaSerializer,
     SerializationInfo,
 )
 from ..schema.json import JsonSchemaDict
 from .base import BaseType
 
-_T = TypeVar('_T', str, bytes)
+_T = TypeVar('_T')
+_TSecret = TypeVar('_TSecret', bound='BaseSecret[Any]')
 
 __all__ = (
-    'SecretType',
+    'BaseSecret',
+    'Secret',
     'SecretBytes',
     'SecretStr',
 )
 
 
-def _secret_display(value: str | bytes) -> str:
+def _secret_display(value: _T) -> str:
+    """Display the secret value."""
     return '**********' if value else ''
 
 
-class SecretType(BaseType, Generic[_T]):
-    """A secret type for storing sensitive information."""
+def _secret_serialization(
+    value: _TSecret, info: SerializationInfo | None = None
+) -> _TSecret | str:
+    """Serialize the secret value."""
+    if info and info.mode == 'json':
+        return _secret_display(value.get_secret_value())
+    return value
+
+
+class BaseSecret(BaseType, Generic[_T]):
+    """A base secret for storing sensitive information."""
+    if typing.TYPE_CHECKING:
+        _schema: ClassVar[CoreSchema | None]
+        _schema_type: ClassVar[str | None]
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
-        """Create a new instance of the secret type."""
+        """Create a new instance of the base secret."""
         # Check if class is directly instantiated
-        if cls is SecretType:
+        if cls is BaseSecret:
             raise TypeError(
-                "Plateforme secret type cannot be directly instantiated. Use "
-                "either `SecretStr` or `SecretBytes` instead."
+                "Plateforme base secret cannot be directly instantiated. Use "
+                "either Secret[<type>], SecretStr, SecretBytes, or subclass "
+                "from Secret[<type>] instead."
             )
         return super().__new__(cls)
 
     def __init__(self, secret_value: _T) -> None:
-        """Initialize the secret type with the given value."""
+        """Initialize the base secret with the given value."""
         self._value: _T = secret_value
 
     def get_secret_value(self) -> _T:
         """Get the secret value."""
         return self._value
 
-    def _display(self) -> _T:
+    def _display(self) -> _T | str:
         """Display the secret value."""
-        raise NotImplementedError
-
-    @classmethod
-    def serialize(
-        cls, value: Self, info: SerializationInfo | None = None
-    ) -> Self | str:
-        """Serialize the secret value."""
-        if info and info.mode == 'json':
-            return _secret_display(value.get_secret_value())
-        return value
+        raise NotImplementedError()
 
     @classmethod
     def __get_pydantic_core_schema__(
         cls,
         source: type[Any],
-        __handler: GetCoreSchemaHandler,
+        handler: GetCoreSchemaHandler,
     ) -> CoreSchema:
-        field_type: type[str | bytes]
-        inner_schema: CoreSchema
-        if issubclass(source, SecretStr):
-            field_type = str
-            inner_schema = core_schema.str_schema()
-        else:
-            assert issubclass(source, SecretBytes)
-            field_type = bytes
-            inner_schema = core_schema.bytes_schema()
-        error_kind = 'string_type' if field_type is str else 'bytes_type'
+        inner_schema = getattr(cls, '_schema', None)
+        if inner_schema is None:
+            inner_type = None
+            # If origin type is secret then extract the inner type directly
+            origin_type = typing.get_origin(source)
+            if origin_type is not None:
+                inner_type = typing.get_args(source)[0]
+            # Otherwise, extract the inner type from the base class
+            else:
+                bases = getattr(
+                    cls, '__orig_bases__', getattr(cls, '__bases__', [])
+                )
+                for base in bases:
+                    if typing.get_origin(base) is Secret:
+                        inner_type = typing.get_args(base)[0]
+                if bases == [] or inner_type is None:
+                    raise TypeError(
+                        f"Can't get secret type from {cls.__name__}. Use "
+                        f"Secret[<type>], or subclass from Secret[<type>] "
+                        f"instead."
+                    )
+            inner_schema = handler.generate_schema(inner_type)
 
         def get_json_schema(
-            __core_schema: CoreSchema,
-            handler: GetJsonSchemaHandler,
+            _core_schema: CoreSchema,
+            _handler: GetJsonSchemaHandler,
         ) -> JsonSchemaDict:
-            schema = handler(inner_schema)
+            schema = _handler(inner_schema)
             schema.update(
                 type='string',
                 writeOnly=True,
@@ -105,28 +131,29 @@ class SecretType(BaseType, Generic[_T]):
             inner_schema,
         )
 
-        schema = core_schema.json_or_python_schema(
-            python_schema=core_schema.union_schema(
-                [
-                    core_schema.is_instance_schema(source),
-                    json_schema,
-                ],
-                strict=True,
-                custom_error_type=error_kind,
-            ),
-            json_schema=json_schema,
-            serialization=core_schema.plain_serializer_function_ser_schema(
-                cls.serialize,
-                info_arg=True,
-                return_schema=core_schema.str_schema(),
-                when_used='json',
-            ),
-        )
-        schema.setdefault('metadata', dict(
-            pydantic_js_functions=[get_json_schema],
-        ))
+        def get_secret_schema(strict: bool) -> CoreSchema:
+            return core_schema.json_or_python_schema(
+                python_schema=core_schema.union_schema(
+                    [
+                        core_schema.is_instance_schema(source),
+                        json_schema,
+                    ],
+                    strict=strict,
+                    custom_error_type=cls._schema_type,
+                ),
+                json_schema=json_schema,
+                serialization=core_schema.plain_serializer_function_ser_schema(
+                    _secret_serialization,
+                    info_arg=True,
+                    when_used='always',
+                ),
+            )
 
-        return schema
+        return core_schema.lax_or_strict_schema(
+            lax_schema=get_secret_schema(strict=False),
+            strict_schema=get_secret_schema(strict=True),
+            metadata={'pydantic_js_functions': [get_json_schema]},
+        )
 
     @classmethod
     def __get_sqlalchemy_data_type__(
@@ -141,17 +168,78 @@ class SecretType(BaseType, Generic[_T]):
     def __hash__(self) -> int:
         return hash(self.get_secret_value())
 
-    def __len__(self) -> int:
-        return len(self._value)
-
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}({self._display()!r})'
 
     def __str__(self) -> str:
         return str(self._display())
 
+    __pydantic_serializer__ = SchemaSerializer(
+        core_schema.any_schema(
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                _secret_serialization,
+                info_arg=True,
+                when_used='always',
+            )
+        )
+    )
 
-class SecretStr(SecretType[str]):
+
+class Secret(BaseSecret[_T]):
+    """A secret generic type.
+
+    It is used for storing sensitive information that you do not want to be
+    visible in logging or tracebacks. When the secret value is nonempty, it is
+    displayed as ``'**********'`` instead of the underlying value in calls to
+    `repr()` and `str()`. If the value is empty, it is displayed as ``''``.
+
+    Examples:
+        >>> from plateforme import BaseModel
+        ... from plateforme.types import Secret
+
+        >>> class User(BaseModel):
+        ...     username: str
+        ...     password: Secret[int]
+        ... user = User(username='johndoe', password='123')
+
+        >>> print(user)
+        username='johndoe' password=Secret('**********')
+
+        >>> print(user.password.get_secret_value())
+        '123'
+
+        >>> print((Secret('password'), Secret('')))
+        (Secret('**********'), Secret(''))
+
+    Note:
+        Custom secret types can be created by subclassing `Secret` and
+        providing a type hint for the secret value. A specific validation
+        schema and custom error type can be provided by defining a class
+        attribute `_schema` with a Pydantic schema and a `_schema_type` with a
+        string representing the error type.
+    """
+
+    _schema = None
+    _schema_type = None
+
+    def _display(self) -> str:
+        """Display the secret value."""
+        return _secret_display(self.get_secret_value())
+
+    @classmethod
+    def __get_sqlalchemy_data_type__(
+        cls, **kwargs: Any
+    ) -> 'JsonEngine[_T]':
+        return JsonEngine[_T](
+            none_as_null=kwargs.get('data_none_as_null', True),
+            processors={
+                'before': lambda v, _: v.get_secret_value() if v else None,
+                'after': lambda v, _: cls(v) if v else None,
+            },
+        )
+
+
+class SecretStr(BaseSecret[str]):
     """A secret string type.
 
     It is used for storing sensitive information that you do not want to be
@@ -178,6 +266,9 @@ class SecretStr(SecretType[str]):
         (SecretStr('**********'), SecretStr(''))
     """
 
+    _schema = core_schema.str_schema()
+    _schema_type = 'string_type'
+
     def _display(self) -> str:
         return _secret_display(self.get_secret_value())
 
@@ -186,11 +277,17 @@ class SecretStr(SecretType[str]):
         return StringEngine(
             length=kwargs.get('max_length', None),
             collation=kwargs.get('data_collation', None),
-
+            processors={
+                'before': lambda v, _: v.get_secret_value() if v else None,
+                'after': lambda v, _: cls(v) if v else None,
+            },
         )
 
+    def __len__(self) -> int:
+        return len(self._value)
 
-class SecretBytes(SecretType[bytes]):
+
+class SecretBytes(BaseSecret[bytes]):
     """A secret bytes type.
 
     It is used for storing sensitive information that you do not want to be
@@ -217,6 +314,9 @@ class SecretBytes(SecretType[bytes]):
         (SecretBytes(b'**********'), SecretBytes(b''))
     """
 
+    _schema = core_schema.bytes_schema()
+    _schema_type = 'bytes_type'
+
     def _display(self) -> bytes:
         """Display the secret value."""
         return _secret_display(self.get_secret_value()).encode()
@@ -225,4 +325,11 @@ class SecretBytes(SecretType[bytes]):
     def __get_sqlalchemy_data_type__(cls, **kwargs: Any) -> BinaryEngine:
         return BinaryEngine(
             length=kwargs.get('max_length', None),
+            processors={
+                'before': lambda v, _: v.get_secret_value() if v else None,
+                'after': lambda v, _: cls(v) if v else None,
+            },
         )
+
+    def __len__(self) -> int:
+        return len(self._value)

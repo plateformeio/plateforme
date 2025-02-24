@@ -284,7 +284,7 @@ if typing.TYPE_CHECKING:
         StrictInteger,
     )
     from .core.types.paths import AnyPath, DirectoryPath, FilePath, NewPath
-    from .core.types.secrets import SecretBytes, SecretStr
+    from .core.types.secrets import Secret, SecretBytes, SecretStr
     from .core.types.strings import StrictString, String
     from .core.types.uuid import UUID, UUID1, UUID3, UUID4, UUID5
 
@@ -573,6 +573,7 @@ __all__ = (
     'FilePath',
     'NewPath',
     # Types (secrets)
+    'Secret',
     'SecretBytes',
     'SecretStr',
     # Types (strings)
@@ -869,6 +870,7 @@ __all_dynamic__: dict[str, tuple[str | None, str]] = {
     'FilePath': (None, '.core.types.paths'),
     'NewPath': (None, '.core.types.paths'),
     # Types (secrets)
+    'Secret': (None, '.core.types.secrets'),
     'SecretBytes': (None, '.core.types.secrets'),
     'SecretStr': (None, '.core.types.secrets'),
     # Types (strings)

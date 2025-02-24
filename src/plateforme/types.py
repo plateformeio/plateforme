@@ -104,7 +104,7 @@ from .core.types.numbers import (
     StrictInteger,
 )
 from .core.types.paths import AnyPath, DirectoryPath, FilePath, NewPath
-from .core.types.secrets import SecretBytes, SecretStr
+from .core.types.secrets import Secret, SecretBytes, SecretStr
 from .core.types.strings import StrictString, String, StringFactory
 from .core.types.uuid import UUID, UUID1, UUID3, UUID4, UUID5, UuidFactory
 
@@ -210,6 +210,7 @@ __all__ = (
     'FilePath',
     'NewPath',
     # Secrets
+    'Secret',
     'SecretBytes',
     'SecretStr',
     # Strings
