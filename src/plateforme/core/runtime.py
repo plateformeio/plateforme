@@ -190,17 +190,17 @@ class Lifecycle(IntEnum):
             value = enums[index + 1]
         return value  # type: ignore
 
-    def lower(self) -> tuple['ReversibleState', ...]:
+    def lower(self, *, include_self: bool = False) -> tuple['Lifecycle', ...]:
         """Return the lower states of the current resource status."""
         enums = tuple(self.__class__)
-        index = enums.index(self)
+        index = enums.index(self) + int(include_self)
         return enums[:index]  # type: ignore
 
-    def higher(self) -> tuple['SchedulableState', ...]:
+    def higher(self, *, include_self: bool = False) -> tuple['Lifecycle', ...]:
         """Return the higher states of the current resource status."""
         enums = tuple(self.__class__)
-        index = enums.index(self)
-        return enums[index + 1:]  # type: ignore
+        index = enums.index(self) + int(not include_self)
+        return enums[index:]  # type: ignore
 
     def __str__(self) -> str:
         return self.name.lower()
@@ -614,11 +614,11 @@ def get_dependencies(
                 walked_deps.add(package_dep)
 
         # Collect dependencies recursively if max depth is not reached
-        if max_depth and depth < max_depth:
+        if max_depth is None or depth < max_depth:
             walked_deps.update([
-                walk_dependencies(link_dep.target, depth + 1)
-                for link_dep in link_deps
-                if is_resource(link_dep.target)
+                walked_dep
+                for link_dep in link_deps if is_resource(link_dep.target)
+                for walked_dep in walk_dependencies(link_dep.target, depth + 1)
             ])
 
         return walked_deps

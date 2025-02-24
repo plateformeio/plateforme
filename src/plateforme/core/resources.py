@@ -1616,14 +1616,21 @@ class ResourceState(Generic[Resource]):
 
         # Helper function to check dependencies
         def check_dependencies() -> bool:
-            if runtime.get_dependencies(
+            # Get all resource dependencies up to the current state
+            dependencies = runtime.get_dependencies(
                 self.owner,
                 _check_guard,
                 kind='resources',
-                status=self.status.lower(),
+                status=self.status.lower(include_self=True),
                 max_depth=None,
-            ):
-                return False
+            )
+            # Check if all dependencies have reached the required state
+            check_status = self.status.lower()
+            for dependency in dependencies:
+                if isinstance(dependency, str) :
+                    return False
+                if dependency.__state__.status in check_status:
+                    return False
             return True
 
         # Check for pending dependencies
@@ -2237,13 +2244,13 @@ def _init_schemas(cls: 'ResourceMeta', /) -> None:
     if is_abstract(cls):
         return
 
-    # Schedule schema and adapter build
+    # Schedule base schema registration
     cls.__state__.schedule(
         Action(_register_base_schemas, bound=True),
         when=Lifecycle.LOADING,
     )
 
-    # Schedule finalization build tasks
+    # Schedule schema and adapter final rebuild
     cls.__state__.schedule(
         Action(_build_schemas_and_adapter, bound=True),
         when=Lifecycle.READY,
@@ -2556,6 +2563,15 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
 
         # Collect fields namespace
         fields_namespace = _extract_base_fields_namespace(namespace)
+
+        # Clean bases for method resolution order
+        try:
+            lookup = [base for base in bases if base is not BaseResource]
+            if len(lookup) != len(bases) \
+                    and any(issubclass(base, BaseResource) for base in lookup):
+                bases = tuple(lookup)
+        except NameError:
+            pass
 
         # Create the configuration class
         cls = super().__new__(

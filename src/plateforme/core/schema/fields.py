@@ -1693,7 +1693,7 @@ class FieldInfo(
                 f"{resource.__qualname__!r} is cascading. The corresponding "
                 f"resource relationship property is not yet defined.",
             )
-        rel_prop = rel_attr.property
+        rel_prop = rel_attr.prop
         assert isinstance(rel_prop, RelationshipProperty)
 
         options_set = set(options)
@@ -1766,7 +1766,7 @@ class FieldInfo(
                 f"corresponding resource relationship property is not yet "
                 f"defined.",
             )
-        rel_prop = rel_attr.property
+        rel_prop = rel_attr.prop
         assert isinstance(rel_prop, RelationshipProperty)
 
         return rel_prop.lazy in ('joined', 'selectin')
