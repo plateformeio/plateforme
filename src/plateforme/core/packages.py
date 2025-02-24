@@ -349,7 +349,11 @@ class Package(Representation):
                             and dependency.target == dependent.owner \
                             and dependency.association_alias == \
                                 dependent.association_alias:
-                        associations.append(Association(dependency, dependent))
+                        if dependency.owner == dependency.target:
+                            association = Association(dependency)
+                        else:
+                            association = Association(dependency, dependent)
+                        associations.append(association)
                         dependencies.remove(dependency)
                         dependents.remove(dependent)
 

@@ -353,10 +353,10 @@ class Association(Representation):
                 continue
 
             # Resolve foreign keys configuration
-            if self.table is None:
-                foreign_keys = columns[count:]
+            if count == 0:
+                foreign_keys = columns
             else:
-                foreign_keys = [columns[count], columns[1 - count]]
+                foreign_keys = reversed(columns)
 
             # Schedule relationship building
             args = (link_a, link_b, self.table, *foreign_keys)
@@ -393,17 +393,19 @@ def _build_relationship(
             between the two resources. This argument is required and must be
             a list containing the foreign key columns for the relationship.
     """
-    # Primary and secondary join configuration
+    # Handle table join and self-referential relationships
+    assert isinstance(link_a.target, type)
     owner_id = link_a.owner.resource_attributes['id']
+    taget_id = link_a.target.resource_attributes['id']
     if secondary is None:
+        assert len(foreign_keys) == 1
         primaryjoin = secondaryjoin = None
+        remote_side = [owner_id] if link_a.owner is link_a.target else None
     else:
-        assert isinstance(link_a.target, type)
-        owner_id = link_a.owner.resource_attributes['id']
-        taget_id = link_a.target.resource_attributes['id']
         assert len(foreign_keys) == 2
         primaryjoin = foreign_keys[0] == owner_id
         secondaryjoin = foreign_keys[1] == taget_id
+        remote_side = None
 
     # Backref configuration
     if link_b is not None:
@@ -466,6 +468,7 @@ def _build_relationship(
             cascade=cascade,
             lazy=lazy,
             foreign_keys=foreign_keys,
+            remote_side=remote_side,
             **rel_extra,
         ),
     )
