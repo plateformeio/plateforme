@@ -297,7 +297,7 @@ class ServiceConfig(ConfigWrapper):
     """Whether to automatically apply the specification when binding the
     service to a facade owner."""
 
-    def post_init(self) -> None:
+    def __post_init__(self) -> None:
         """Post-initialization steps for the service configuration."""
         # Skip post-initialization if the configuration owner is not set
         service = self.__config_owner__

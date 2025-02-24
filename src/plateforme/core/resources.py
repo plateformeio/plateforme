@@ -492,7 +492,7 @@ class ResourceConfig(ModelConfig):
             return
 
         # Model post-initialization
-        super().post_init()
+        super().__post_init__()
 
         # Resource post-initialization
         fields = resource.resource_fields

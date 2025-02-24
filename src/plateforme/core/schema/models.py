@@ -559,7 +559,7 @@ class ModelConfig(ConfigWrapper):
     Defaults to ``True``.
     """
 
-    def post_init(self) -> None:
+    def __post_init__(self) -> None:
         """Post-initialization steps for the model configuration."""
         # Validate protected namespaces
         self.setdefault('protected_namespaces', PROTECTED_NAMESPACES)

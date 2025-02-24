@@ -513,6 +513,20 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         if not __partial_init:
             self.validate()
 
+    def __post_init__(self) -> None:
+        """Post-initialization method for the configuration class.
+
+        Override this method to perform additional initialization steps after
+        the configuration instance has been created. This method is called
+        automatically after the configuration instance has been initialized,
+        unless the `partial_init` flag is set to ``True``.
+
+        Note:
+            See the `validate` method for more information on the validation
+            process of the configuration instance.
+        """
+        ...
+
     def __get__(self, instance: Any, owner: Any) -> Self:
         """Set the configuration wrapper owner if not already set."""
         # Setup configuration owner
@@ -650,20 +664,6 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
 
         return config
 
-    def post_init(self) -> None:
-        """Post-initialization method for the configuration class.
-
-        Override this method to perform additional initialization steps after
-        the configuration instance has been created. This method is called
-        automatically after the configuration instance has been initialized,
-        unless the `partial_init` flag is set to ``True``.
-
-        Note:
-            See the `validate` method for more information on the validation
-            process of the configuration instance.
-        """
-        ...
-
     def validate(
         self,
         *,
@@ -690,7 +690,7 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
                 context.
         """
         # Perform post-initialization
-        self.post_init()
+        self.__post_init__()
 
         # Validate for missing required fields
         config_missing = [

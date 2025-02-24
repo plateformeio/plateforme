@@ -376,7 +376,7 @@ class APIRouteConfig(ConfigWrapper, sources=(APIRouteConfigDict,)):
                 return match.group(1)
         return to_path_case(self.alias)
 
-    def post_init(self) -> None:
+    def __post_init__(self) -> None:
         """Post-initialization steps for the API route configuration."""
 
         # Check if the route mode is valid
@@ -472,7 +472,7 @@ class APIRouteDecorator:
         """
         config = self.defaults.copy()
         config.update(kwargs)
-        config.post_init()
+        config.__post_init__()
 
         # Set the route configuration
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
