@@ -92,6 +92,7 @@ from ..typing import (
     get_object_name,
     has_stub_noop,
     is_annotated,
+    is_base_class,
     is_model,
     is_resource,
     isbaseclass_lenient,
@@ -1145,11 +1146,9 @@ class BaseModel(_BaseModel, Configurable[ModelConfig], metaclass=ModelMeta):
             rebuilding was successful, otherwise ``False`` if an error
             occurred and `raise_errors` is set to ``False``.
         """
-        build_status: bool | None = None
-
         # Rebuild model
-        build_status = super().model_rebuild(
-            force=build_status or force,
+        build_status: bool | None = super().model_rebuild(
+            force=force,
             raise_errors=raise_errors,
             _parent_namespace_depth=_parent_namespace_depth,
             _types_namespace=_types_namespace,
@@ -2705,7 +2704,7 @@ def collect_fields(
         predicate: IncExPredicate,
     ) -> bool:
         # Retrieve field target attribute
-        attr = field
+        attr: Any = field
         key_segments = key.split('.')
         for key_segment in key_segments:
             if not hasattr(attr, key_segment):
@@ -2737,9 +2736,9 @@ def collect_fields(
             attr_value = attr
 
         return bool(
-            check_value in attr_value
-            if isinstance(attr_value, (list, set, tuple))
-            else check_value == attr_value
+            attr_value in check_value
+            if isinstance(check_value, (list, set, tuple))
+            else attr_value == check_value
         )
 
     # Recursive function to process field lookup configuration
@@ -2865,19 +2864,72 @@ def collect_models(
             continue
 
         # Build model
-        model_name = attr_name[len(__namespace__):]
         if issubclass(attr, BaseModel):
             model = attr
+        elif not is_base_class(attr):
+            continue
         else:
-            field_definitions = {}
+            field_definitions: dict[str, FieldDefinition] = {}
+
+            # Handle nested models include and exclude filters
+            field_include = getattr(attr, '__include__', None)
+            field_exclude = getattr(attr, '__exclude__', None)
+            if field_include or field_exclude:
+                if not is_model(__obj) and not is_resource(__obj):
+                    raise TypeError(
+                        f"Field include and exclude filters can only be used "
+                        f"within nested model classes. Got: {__obj}."
+                    )
+                # Validate include filters
+                field_sort = None
+                if field_include is not None:
+                    if not isinstance(field_include, (list, set, tuple)):
+                        raise TypeError(
+                            f"Field include filter must be a collection of "
+                            f"field names. Got: {field_include}."
+                        )
+                    if not isinstance(field_include, set):
+                        field_sort = field_include
+                    field_include = set(field_include)
+                # Validate exclude filters
+                if field_exclude  is not None:
+                    if not isinstance(field_exclude, (list, set, tuple)):
+                        raise TypeError(
+                            f"Field exclude filter must be a collection of "
+                            f"field names. Got: {field_exclude}."
+                        )
+                    field_exclude = set(field_exclude)
+                # Collect base fields
+                base_field_definitions = collect_fields(
+                    __obj,  # type: ignore
+                    include={'name': field_include} if field_include else None,
+                    exclude={'name': field_exclude} if field_exclude else None,
+                )
+                # Sort and update base fields
+                if field_sort is not None:
+                    base_field_definitions = dict(sorted(
+                        base_field_definitions.items(),
+                        key=lambda item: field_sort.index(item[0])
+                    ))
+                field_definitions.update(base_field_definitions)
+
+            # Handle models annotations
             for field_name, field_type in attr.__annotations__.items():
                 if field_name.startswith('_'):
                     continue
                 field_value = ...
                 if hasattr(attr, field_name):
                     field_value = getattr(attr, field_name)
+                if field_name in field_definitions:
+                    raise ValueError(
+                        f"Field {field_name!r} is already defined in the "
+                        f"model. A field included automatically by the model "
+                        f"definition cannot be redefined. Got: "
+                        f"{field_definitions[field_name][0]}."
+                    )
                 field_definitions[field_name] = (field_type, field_value)
 
+            model_name = attr_name[len(__namespace__):]
             model = create_model(  # type: ignore
                 model_name,
                 __config__=__config__,

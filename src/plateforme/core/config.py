@@ -306,8 +306,10 @@ class ConfigWrapperMeta(type):
         # Retrieve type hints and names from the configuration wrapper class
         # definition. The type names derived from annotations keys are used to
         # check if a field is defined in the class or in one of its bases.
-        type_hints = get_cls_type_hints_lenient(cls, types_namespace)
-        type_names = cls.__dict__.get('__annotations__', {}).keys()
+        annotations = cls.__dict__.get('__annotations__', {})
+        type_hints = get_cls_type_hints_lenient(
+            cls, types_namespace, include_extras=True
+        )
 
         for name, value in type_hints.items():
             # Skip private and dunder attributes
@@ -333,7 +335,7 @@ class ConfigWrapperMeta(type):
                 if default is Undefined:
                     raise AttributeError
             except AttributeError:
-                if name in type_names:
+                if name in annotations:
                     field_info = ConfigFieldInfo.from_annotation(
                         value, owner=cls, name=name  # type: ignore
                     )

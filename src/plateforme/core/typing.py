@@ -104,6 +104,7 @@ __all__ = (
     'is_abstract',
     'is_annotated',
     'is_async',
+    'is_base_class',
     'is_configurable',
     'is_endpoint',
     'is_exception',
@@ -1163,6 +1164,11 @@ def is_async(obj: Any) -> TypeIs[Awaitable[Any]]:
 def is_async_function(obj: Any) -> TypeIs[Awaitable[Any]]:
     """Check if the given object is an asynchronous function or coroutine."""
     return inspect.iscoroutine(obj) or isinstance(obj, Future)
+
+
+def is_base_class(cls: Any) -> TypeIs[type[Any]]:
+    """Check if the given class is a base class."""
+    return getattr(cls, '__base__', None) is object
 
 
 def is_configurable(obj: Any) -> TypeIs['Configurable[Any]']:

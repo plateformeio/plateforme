@@ -1788,6 +1788,86 @@ class ResourceState(Generic[Resource]):
 
 # MARK: Helpers (base)
 
+def _create_base_model(
+    cls: 'ResourceMeta',
+    bases: tuple[type, ...],
+    fields_namespace: dict[str, Any],
+    /,
+    *args: Any,
+) -> None:
+    """Create the base model for the resource class."""
+    model_name = 'Model'
+    model_qualname = f'{cls.__qualname__}.Model'
+
+    model_bases: tuple[ModelType, ...] = ()
+    for base in bases:
+        model_base = getattr(base, 'Model', None)
+        if model_base and issubclass(model_base, BaseModel):
+            model_bases += (model_base,)
+    if not model_bases:
+        model_bases = (BaseModel,)
+
+    model_namespace: dict[str, Any] = {
+        **fields_namespace,
+        '__name__': model_name,
+        '__qualname__': model_qualname,
+        '__config__': cls.resource_config.entries(
+            scope='set',
+            include_keys=ModelConfig,
+        ),
+    }
+
+    # Create resource model
+    model: ModelType = ModelMeta(  # type: ignore[assignment]
+        model_name,
+        model_bases,
+        model_namespace,
+        __pydantic_owner__='resource',
+        __pydantic_resource__=cls,
+        *args,
+        defer_build=True,
+    )
+
+    # Validate model configuration
+    model.model_config.validate()
+
+    # Set resource model
+    setattr(cls, 'Model', model)
+
+    # Validate resource configuration and initialize identity and type
+    cls.resource_config.validate()
+
+    if not is_abstract(cls):
+        _update_base_identity_and_type(cls)
+
+
+def _init_base_model(cls: 'ResourceMeta', /) -> None:
+    """Initialize the base model for the resource class."""
+    # Skip if abstract
+    if is_abstract(cls):
+        return
+
+    # Schedule base model build
+    cls.__state__.schedule(
+        Action(_build_base_model, bound=True),
+        when=Lifecycle.INITIALIZING,
+    )
+
+
+# MARK:> Schedule
+
+def _build_base_model(cls: 'ResourceMeta', /) -> None:
+    """Build the base model for the resource class.
+
+    Note:
+        This process is delayed until the resource class is fully initialized
+        to ensure all resource fields are properly defined and configured.
+    """
+    cls.Model.model_rebuild(force=True)
+
+
+# MARK:> Utilities
+
 def _extract_base_fields_namespace(
     namespace: dict[str, Any], /
 ) -> dict[str, Any]:
@@ -1833,7 +1913,7 @@ def _extract_base_fields_namespace(
     return fields_namespace
 
 
-def _init_base_identity_and_type(cls: 'ResourceMeta', /) -> None:
+def _update_base_identity_and_type(cls: 'ResourceMeta', /) -> None:
     """Initialize the base identity and type fields for the resource class."""
     # Identity field setup
     id = cls.resource_fields['id']
@@ -1893,64 +1973,6 @@ def _init_base_identity_and_type(cls: 'ResourceMeta', /) -> None:
         annotation=Literal[type_alias],  # type: ignore
         default=type_alias,
     )
-
-
-def _init_base_model_and_configuration(
-    cls: 'ResourceMeta',
-    bases: tuple[type, ...],
-    fields_namespace: dict[str, Any],
-    /,
-    *args: Any,
-) -> None:
-    """Initialize the base model for the resource class."""
-    model_name = 'Model'
-    model_qualname = f'{cls.__qualname__}.Model'
-
-    model_bases: tuple[ModelType, ...] = ()
-    for base in bases:
-        model_base = getattr(base, 'Model', None)
-        if model_base and issubclass(model_base, BaseModel):
-            model_bases += (model_base,)
-    if not model_bases:
-        model_bases = (BaseModel,)
-
-    model_namespace: dict[str, Any] = {
-        **fields_namespace,
-        '__name__': model_name,
-        '__qualname__': model_qualname,
-        '__config__': cls.resource_config.entries(
-            scope='set',
-            include_keys=ModelConfig,
-        ),
-    }
-
-    # Create resource model
-    model: ModelType = ModelMeta(  # type: ignore[assignment]
-        model_name,
-        model_bases,
-        model_namespace,
-        __pydantic_owner__='resource',
-        __pydantic_resource__=cls,
-        *args,
-        defer_build=True,
-    )
-
-    # Validate model configuration
-    model.model_config.validate()
-
-    # Set resource model
-    setattr(cls, 'Model', model)
-
-    # Validate resource configuration and initialize identity and type
-    cls.resource_config.validate()
-
-    if not is_abstract(cls):
-        _init_base_identity_and_type(cls)
-
-
-def _build_base_model(cls: 'ResourceMeta', /) -> None:
-    """Build the base model for the resource class."""
-    cls.Model.model_rebuild(force=True)
 
 
 # MARK: Helpers (declarative)
@@ -2015,35 +2037,17 @@ def _init_declarative_fields(
         cls.__annotations__.pop(key, None)
 
 
-def _init_declarative_composite_indexes(cls: 'ResourceMeta', /) -> None:
-    """Initialize the declarative composite indexes for the resource class.
+def _init_declarative_indexes(cls: 'ResourceMeta', /) -> None:
+    """Initialize the declarative indexes for the resource class."""
+    # Skip if abstract
+    if is_abstract(cls):
+        return
 
-    It collects the resource composite indexes defined in the resource
-    configuration and creates the corresponding SQLAlchemy indexes for the
-    resource class. This initialization is delayed to ensure that all resource
-    attributes are defined before creating the indexes, especially the indexes
-    configured on association fields.
-    """
-    for index in cls.resource_config.indexes:
-        # Resolve index expressions
-        index_expressions: tuple[InstrumentedAttribute[Any], ...] = ()
-        for field_alias in index['aliases']:
-            index_field = cls.resource_fields[field_alias]
-            index_alias = index_field.rel_attribute or field_alias
-            if index_alias not in cls.resource_attributes:
-                raise PlateformeError(
-                    f"Invalid index field {index_alias!r} for resource "
-                    f"{cls.__qualname__!r}. The field does not exist in the "
-                    f"resource attributes.",
-                    code='resource-invalid-config',
-                )
-            index_expressions += (cls.resource_attributes[index_alias],)
-        # Build index
-        Index(
-            NAMING_CONVENTION['ix'] % {'column_0_label': index['name']},
-            *index_expressions,
-            unique=index['unique'],
-        )
+    # Schedule declarative composite indexes build
+    cls.__state__.schedule(
+        Action(_build_declarative_composite_indexes, bound=True),
+        when=Lifecycle.INITIALIZING,
+    )
 
 
 def _init_declarative_model(
@@ -2140,7 +2144,43 @@ def _init_declarative_model(
         ))
 
 
-# MARK: Helpers (identifiers and indexes)
+# MARK:> Schedule
+
+def _build_declarative_composite_indexes(cls: 'ResourceMeta', /) -> None:
+    """Build the declarative composite indexes for the resource class.
+
+    It collects the resource composite indexes defined in the resource
+    configuration and creates the corresponding SQLAlchemy indexes for the
+    resource class.
+
+    Note:
+        This process is delayed until the resource class is fully initialized
+        to ensure that all resource attributes are defined before creating the
+        indexes, especially the indexes configured on association fields.
+    """
+    for index in cls.resource_config.indexes:
+        # Resolve index expressions
+        index_expressions: tuple[InstrumentedAttribute[Any], ...] = ()
+        for field_alias in index['aliases']:
+            index_field = cls.resource_fields[field_alias]
+            index_alias = index_field.rel_attribute or field_alias
+            if index_alias not in cls.resource_attributes:
+                raise PlateformeError(
+                    f"Invalid index field {index_alias!r} for resource "
+                    f"{cls.__qualname__!r}. The field does not exist in the "
+                    f"resource attributes.",
+                    code='resource-invalid-config',
+                )
+            index_expressions += (cls.resource_attributes[index_alias],)
+        # Build index
+        Index(
+            NAMING_CONVENTION['ix'] % {'column_0_label': index['name']},
+            *index_expressions,
+            unique=index['unique'],
+        )
+
+
+# MARK: Helpers (indexes)
 
 def _init_identifiers_and_indexes(cls: 'ResourceMeta', /) -> None:
     """Initialize the identifiers and indexes for the resource class.
@@ -2150,7 +2190,9 @@ def _init_identifiers_and_indexes(cls: 'ResourceMeta', /) -> None:
     ``{'id'}`` by default for both, and then looks for unique and indexed
     singular or composite field definitions.
     """
-    assert not is_abstract(cls)
+    # Skip if abstract
+    if is_abstract(cls):
+        return
 
     # Initialize identifiers and indexes with default "id" field
     identifiers: list[set[str]] = [{'id'}]
@@ -2178,8 +2220,11 @@ def _init_identifiers_and_indexes(cls: 'ResourceMeta', /) -> None:
 
 def _init_package(cls: 'ResourceMeta', /) -> None:
     """Initialize the package for the resource class."""
+    # Skip if abstract
     if is_abstract(cls):
         return
+
+    # Resolve package
     package = runtime.import_package(cls.__module__, force_resolution=True)
     setattr(cls, 'resource_package', package)
 
@@ -2188,12 +2233,68 @@ def _init_package(cls: 'ResourceMeta', /) -> None:
 
 def _init_schemas(cls: 'ResourceMeta', /) -> None:
     """Initialize the schema models for the resource class."""
-    assert not is_abstract(cls)
+    # Skip if abstract
+    if is_abstract(cls):
+        return
 
-    models = collect_models(cls)
+    # Schedule schema and adapter build
+    cls.__state__.schedule(
+        Action(_register_base_schemas, bound=True),
+        when=Lifecycle.LOADING,
+    )
+
+    # Schedule finalization build tasks
+    cls.__state__.schedule(
+        Action(_build_schemas_and_adapter, bound=True),
+        when=Lifecycle.READY,
+    )
+
+
+# MARK:> Schedule
+
+def _register_base_schemas(cls: 'ResourceMeta', /) -> None:
+    """Register the base schema models for the resource class.
+
+    Note:
+        This process is delayed until the resource class is fully initialized
+        to ensure that all resource fields are properly defined and configured.
+    """
+    # Collect schema models
+    models = collect_models(
+        cls,
+        __cls_kwargs__={
+            'defer_build': not cls.__pydantic_complete__
+        },
+    )
+
+    # Register schema models
     for model in models:
-        cls._register_schema(model.__name__, __owner__=cls, __base__=model)
+        cls._register_schema(
+            model.__name__, __owner__=cls, __base__=model
+        )
 
+
+def _build_schemas_and_adapter(cls: 'ResourceMeta', /) -> None:
+    """Build the schemas and adapter for the resource class.
+
+    Note:
+        This process is delayed until the resource class is ready to ensure
+        that all adapters and schemas are properly defined and configured.
+    """
+    cls._rebuild_adapter()
+    cls._rebuild_schemas()
+
+    # Update all base resource adapter and schema with this new variant
+    for base in cls.__bases__:
+        if not issubclass(base, BaseResource):
+            continue
+        if is_abstract(base) or not base.__pydantic_complete__:
+            break
+        base._rebuild_adapter()
+        base._rebuild_schemas()
+
+
+# MARK:> Utilities
 
 def _create_schema_base_model(
     cls: 'ResourceMeta',
@@ -2302,22 +2403,7 @@ def _create_schema_base_model(
     cls._rebuild_schemas(__schema_alias, force=True)
 
 
-def _build_schemas_and_adapter(cls: 'ResourceMeta', /) -> None:
-    """Build the schemas and adapter for the resource class."""
-    cls._rebuild_adapter()
-    cls._rebuild_schemas()
-
-    # Update all base resource adapter and schema with this new variant
-    for base in cls.__bases__:
-        if not issubclass(base, BaseResource):
-            continue
-        if is_abstract(base) or not base.__pydantic_complete__:
-            break
-        base._rebuild_adapter()
-        base._rebuild_schemas()
-
-
-# MARK: Helpers (specs and services)
+# MARK: Helpers (services)
 
 def _init_specs_and_services(
     cls: 'ResourceMeta', bases: tuple[type, ...], /
@@ -2380,7 +2466,7 @@ def _init_specs_and_services(
 
     setattr(cls, '__config_services__', services)
 
-    # Skip if not abstract
+    # Skip if abstract
     if is_abstract(cls):
         return
 
@@ -2491,8 +2577,8 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
         setattr(cls, 'resource_attributes', {})
         setattr(cls, 'resource_schemas', {})
 
-        # Initialize resource base model
-        _init_base_model_and_configuration(cls, bases, fields_namespace, *args)
+        # Create resource base model
+        _create_base_model(cls, bases, fields_namespace, *args)
 
         # Set resource post init method name
         if not isbaseclass_lenient(cls, 'BaseResource') \
@@ -2515,11 +2601,14 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
         # Initialize resource package
         _init_package(cls)
 
-        # Initialize resource declarative model
+        # Initialize resource model
+        _init_base_model(cls)
         _init_declarative_model(cls, bases)
         _init_declarative_fields(cls, bases)
+        _init_declarative_indexes(cls)
 
-        # Initialize resource services
+        # Initialize resource schemas and services
+        _init_schemas(cls)
         _init_specs_and_services(cls, bases)
 
         # Skip if abstract
@@ -2538,23 +2627,9 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
 
         # Initialize resource identifiers and schemas
         _init_identifiers_and_indexes(cls)
-        _init_schemas(cls)
 
         # Add resource to its package
         cls.resource_package._add_resource(cls)  # type: ignore
-
-        # Schedule initialization build tasks
-        cls.__state__.schedule(
-            Action(_build_base_model, bound=True),
-            Action(_init_declarative_composite_indexes, bound=True),
-            when=Lifecycle.INITIALIZING,
-        )
-
-        # Schedule finalization build tasks
-        cls.__state__.schedule(
-            Action(_build_schemas_and_adapter, bound=True),
-            when=Lifecycle.READY,
-        )
 
         logger.debug(f"rsc:{cls.resource_config.alias} -> created")
 
