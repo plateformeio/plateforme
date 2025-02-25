@@ -19,6 +19,7 @@ __all__ = (
     'LICENSE',
     'VERSION',
     'URL',
+    'package_dir',
     'version_info',
     'version_major',
     'version_minor',
@@ -36,6 +37,18 @@ LICENSE = 'MIT'
 
 VERSION = '0.1.0-a3'
 """The version of the Plateforme framework."""
+
+
+def package_dir() -> str:
+    """The Plateforme framework site package directory."""
+    from pathlib import Path
+
+    path = Path(__file__).parents[1].absolute()
+
+    if path.name == 'src':
+        path = path.parent
+
+    return path
 
 
 @typing.overload
@@ -67,7 +80,6 @@ def version_info(
         ```
     """
     import importlib.metadata
-    import os
     import platform
     import sys
     from pathlib import Path
@@ -81,28 +93,29 @@ def version_info(
         'fastapi',
         'mypy',
         'pydantic',
-        'pydantic-core',
+        'pydantic_core',
         'pydantic-extra-types',
         'pydantic-settings',
         'pyright',
         'sqlalchemy',
+        'starlette',
         'typing_extensions',
+        'uvicorn',
     }
-    related_packages = []
 
-    # Get information about packages
+    # Get information about related packages
+    related_packages = []
     for dist in importlib.metadata.distributions():
-        name = dist.metadata['Name']
+        name = dist.metadata['Name'].lower()
         if name in package_names:
             related_packages.append(f'{name}-{dist.version}')
+    related_packages.sort()
 
     # Get information about the framework
-    plateforme_dir = os.path.abspath(
-        os.path.dirname(os.path.dirname(__file__))
-    )
+    source = package_dir()
     most_recent_commit = (
-        git.git_revision(plateforme_dir)
-        if git.is_git_repo(plateforme_dir) and git.have_git() else 'unknown'
+        git.git_revision(source)
+        if git.is_git_repo(source) and git.have_git() else 'unknown'
     )
 
     # Build information object
