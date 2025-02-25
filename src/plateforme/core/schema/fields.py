@@ -2558,6 +2558,9 @@ def computed_field(
     alias_priority: int | None = None,
     slug: str | None = None,
     title: str | None = None,
+    field_title_generator: Callable[
+        [str, ComputedFieldInfo], str
+    ] | None = None,
     description: str | None = None,
     examples: list[Any] | None = None,
     deprecated: Deprecated | str | bool | None = None,
@@ -2575,6 +2578,9 @@ def computed_field(
     alias_priority: int | None = None,
     slug: str | None = None,
     title: str | None = None,
+    field_title_generator: Callable[
+        [str, ComputedFieldInfo], str
+    ] | None = None,
     description: str | None = None,
     examples: list[Any] | None = None,
     deprecated: Deprecated | str | bool | None = None,
@@ -2795,6 +2801,7 @@ def computed_field(
             alias_priority=alias_priority,
             slug=slug,
             title=title,
+            field_title_generator=field_title_generator,
             description=description,
             examples=examples,
             deprecated=deprecated,

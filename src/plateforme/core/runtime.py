@@ -951,7 +951,7 @@ def import_package(
     name = getattr(package_module, '__name__', name)
 
     # Handle invalid package module
-    if not is_package(package_module, allow_root=True):
+    if not is_package(package_module, allow_base=True):
         # Recursively resolve parent package if forced
         if not force_resolution:
             raise ImportError(

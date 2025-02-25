@@ -5218,7 +5218,7 @@ def _extract_resource_endpoint_parameters(
         # Check for selection information candidates
         elif resource is ann.content and not ann.optional and not any(
             isinstance(info, (BodyInfo, QueryInfo))
-            for info in ann.metadata
+            for info in [param.default, *ann.metadata]
         ):
             candidates.append((ann, param))
 

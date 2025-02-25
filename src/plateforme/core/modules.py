@@ -26,6 +26,7 @@ __all__ = (
     'get_root_module_name',
     'import_module',
     'import_object',
+    'is_base_module',
     'is_namespace',
     'is_package',
     'is_root_module',
@@ -211,23 +212,10 @@ def import_object(
     return obj
 
 
-def is_namespace(module: ModuleType) -> bool:
-    """Whether a module is a valid namespace."""
-    if not getattr(module, '__file__', None):
-        return True
-    return False
-
-
-def is_package(module: ModuleType, *, allow_root: bool = False) -> bool:
-    """Whether a module is a valid package."""
-    if getattr(module, '__path__', None):
-        return True
-    # Handle root module
-    if allow_root \
-        and not getattr(module, '__package__', None) \
-        and is_root_module(module):
-            return True
-    return False
+def is_base_module(module: ModuleType | str) -> bool:
+    """Whether a module is a base module."""
+    name = module if isinstance(module, str) else module.__name__
+    return '.' not in name
 
 
 def is_root_module(module: ModuleType | str) -> bool:
@@ -235,6 +223,25 @@ def is_root_module(module: ModuleType | str) -> bool:
     name = module if isinstance(module, str) else module.__name__
     regex = re.compile(rf'^__(?:[a-z]+_)?{ROOT_MODULE}__$')
     return bool(regex.match(name))
+
+
+def is_namespace(module: ModuleType) -> bool:
+    """Whether a module is a valid namespace."""
+    if not getattr(module, '__file__', None):
+        return True
+    return False
+
+
+def is_package(module: ModuleType, *, allow_base: bool = False) -> bool:
+    """Whether a module is a valid package."""
+    if getattr(module, '__path__', None):
+        return True
+    # Handle base modules
+    if allow_base \
+        and not getattr(module, '__package__', None) \
+        and is_base_module(module):
+            return True
+    return False
 
 
 def resolve_file_paths(module: ModuleType) -> list[str]:
