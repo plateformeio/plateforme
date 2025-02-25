@@ -63,7 +63,7 @@ dependencies = [
     "pydantic-core==2.27.2",
     "pydantic-settings==2.2.1",
     "python-dotenv==1.0.1",
-    "sqlalchemy==2.0.27",
+    "sqlalchemy==2.0.38",
 ]
 
 [project.optional-dependencies]
