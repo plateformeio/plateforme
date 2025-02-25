@@ -192,7 +192,7 @@ if typing.TYPE_CHECKING:
         TypeAdapter,
         TypeAdapterList,
     )
-    from .core.selectors import BaseSelector, Key, KeyList
+    from .core.selectors import BaseSelector, Id, Key, KeyList
     from .core.services import (
         BaseService,
         BaseServiceWithSpec,
@@ -414,6 +414,7 @@ __all__ = (
     'ResourceIndex',
     # Core (selectors)
     'BaseSelector',
+    'Id',
     'Key',
     'KeyList',
     # Core (services)
@@ -711,6 +712,7 @@ __all_dynamic__: dict[str, tuple[str | None, str]] = {
     'ResourceIndex': (None, '.core.resources'),
     # Core (selectors)
     'BaseSelector': (None, '.core.selectors'),
+    'Id': (None, '.core.selectors'),
     'Key': (None, '.core.selectors'),
     'KeyList': (None, '.core.selectors'),
     # Core (services)

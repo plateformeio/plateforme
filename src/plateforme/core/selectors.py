@@ -64,6 +64,7 @@ __all__ = (
     'SelectorConfig',
     'SelectorMeta',
     'SelectorType',
+    'Id',
     'Key',
     'KeyList',
 )
@@ -111,10 +112,11 @@ class SelectorMeta(ABCMeta, ConfigurableMeta):
         namespace.setdefault('__config_resource__', None)
         cls = super().__new__(mcls, name, bases, namespace, **kwargs)
 
-        # Return the class directly if it is the base or a key selector class
-        # and skip the resource assignment as it should be done using generic
-        # arguments within type annotations for inheriting selectors.
-        if isbaseclass_lenient(cls, ('BaseSelector', 'Key', 'KeyList')):
+        # Return the class directly if it is the base, or an id or key selector
+        # class and skip the resource assignment as it should be done using
+        # generic arguments within type annotations for inheriting selectors.
+        basenames = ('BaseSelector', 'Id', 'Key', 'KeyList')
+        if isbaseclass_lenient(cls, basenames):
             return cls
 
         # Collect the selector resources from the bases and original bases
@@ -944,11 +946,13 @@ class BaseSelector(
         __handler: GetCoreSchemaHandler,
     ) -> CoreSchema:
         # Retrieve resource and metadata update from the selector generic
-        # argument if the source is a key or key list selector.
+        # argument if the source is an id, key or key list selector.
         resource = None
         update = None
         if isbaseclass_lenient(
-            __source, ('Key', 'KeyList'), allow_generic=True
+            __source,
+            ('Id', 'Key', 'KeyList'),
+            allow_generic=True,
         ):
             resource, update = cls.parse_annotation(__source)
             if cls.__config_resource__ is not None \
@@ -1043,6 +1047,60 @@ class BaseSelector(
 
     def __str__(self) -> str:
         return self.serialize(self, mode='json')
+
+
+#  MARK: Identity Selector
+
+@typing.final
+class Id(BaseSelector[_T], Generic[_T]):
+    """A resource identity to uniquely identify a resource instance.
+
+    This class is used as type annotation to define a resource identity for a
+    specific resource class. It must be used with a generic argument to specify
+    the resource class associated with the underlying identity within
+    annotations, or it should be directly instantiated with the `validate`
+    method by providing a resource class as an argument.
+
+    Note:
+        This class if final and is not meant to be inherited. Use the base
+        selector class instead to create custom selector classes.
+    """
+
+    __config__ = SelectorConfig(collection=False)
+
+    def __init__(self, id: Any) -> None:
+        """Initialize a new identity selector."""
+        super().__init__(id=id)
+
+    async def resolve(
+        self,
+        __session: AsyncSession | None = None,
+        *,
+        options: Sequence[ExecutableOption] | None = None,
+        **kwargs: Any,
+    ) -> _T:
+        """Resolve the identity."""
+        result = await super().resolve(__session, options=options)
+        assert not isinstance(result, Sequence)
+        return result
+
+    async def resolve_lenient(
+        self,
+        __session: AsyncSession | None = None,
+        *,
+        options: Sequence[ExecutableOption] | None = None,
+        **kwargs: Any,
+    ) -> _T | None:
+        """Resolve the identity in a lenient way."""
+        result = await super().resolve_lenient(__session, options=options)
+        assert result is None or not isinstance(result, Sequence)
+        return result
+
+    def __repr_source__(self) -> str | None:
+        resource = self.__config_resource__
+        if resource is None:
+            return None
+        return resource.__qualname__
 
 
 #  MARK: Key Selectors

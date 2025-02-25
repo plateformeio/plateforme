@@ -61,7 +61,13 @@ from typing import (
 from typing_extensions import TypedDict
 
 from . import runtime
-from .api.parameters import Path, PayloadInfo, SelectionInfo
+from .api.parameters import (
+    BodyInfo,
+    Path,
+    PayloadInfo,
+    QueryInfo,
+    SelectionInfo,
+)
 from .api.requests import Request
 from .api.responses import JSONResponse, Response
 from .api.routing import (
@@ -5210,7 +5216,10 @@ def _extract_resource_endpoint_parameters(
             selections.append((ann, param))
 
         # Check for selection information candidates
-        elif resource is ann.content and not ann.optional:
+        elif resource is ann.content and not ann.optional and not any(
+            isinstance(info, (BodyInfo, QueryInfo))
+            for info in ann.metadata
+        ):
             candidates.append((ann, param))
 
         # Validate parameter metadata

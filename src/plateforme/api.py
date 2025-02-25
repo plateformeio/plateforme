@@ -59,7 +59,7 @@ from .core.api.routing import (
 from .core.api.status import status
 from .core.api.websockets import WebSocket, WebSocketDisconnect
 from .core.expressions import Condition, Filter, Ordering, Sort
-from .core.selectors import BaseSelector, Key, KeyList
+from .core.selectors import BaseSelector, Id, Key, KeyList
 
 __all__ = (
     # Background
@@ -117,6 +117,7 @@ __all__ = (
     'route',
     # Selectors
     'BaseSelector',
+    'Id',
     'Key',
     'KeyList',
     # Status
