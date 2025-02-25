@@ -9,7 +9,6 @@
 The main command line interface entry point.
 """
 
-import os
 import sys
 
 import typer
@@ -76,9 +75,6 @@ def main(
     ),
 ) -> None:
     """Command line interface main entry point."""
-    # Add current working directory to the Python path
-    sys.path.insert(0, os.getcwd())
-
     # Print information
     print_info(ctx)
 
@@ -90,6 +86,10 @@ def main(
             logger.error(error)
             raise typer.Exit(code=1)
         project_info = None
+
+    # Add project directory to the Python path
+    if project_info is not None:
+        sys.path.insert(0, project_info.directory)
 
     # Initialize context information
     ctx.obj = ContextInfo(

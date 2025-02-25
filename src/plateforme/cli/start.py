@@ -65,7 +65,7 @@ def start(
             cwd=project.directory,
             env={
                 **os.environ,
-                "PYTHONPATH": str(project.directory),
+                "PYTHONPATH": project.directory,
             },
         )
     except subprocess.CalledProcessError as e:

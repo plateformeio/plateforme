@@ -24,7 +24,6 @@ from .schema.fields import Field
 from .schema.models import BaseModel, ModelConfig
 from .settings import PackageSettings
 from .types.networks import Email
-from .types.paths import AnyPath
 
 if typing.TYPE_CHECKING:
     from plateforme import Plateforme
@@ -193,7 +192,7 @@ class ProjectLicenseInfo(BaseModel):
         examples=['Apache-2.0', 'MIT'],
     )
 
-    file: AnyPath | None = Field(
+    file: str | None = Field(
         default=None,
         title='File',
         description="""A file path pointing to the license information. The
@@ -340,7 +339,7 @@ class ProjectInfo(BaseModel):
         description="""The package default settings of the project.""",
     )
 
-    directory: Path = Field(
+    directory: str = Field(
         default=None,
         title='Root directory',
         description="""The root directory of the project. It is used to resolve
@@ -457,7 +456,7 @@ def import_project_info(
             f"section for 'config.toml' files."
         )
 
-    project_config['directory'] = project_path.parent
+    project_config['directory'] = project_path.parent.as_posix()
     project_info = ProjectInfo.model_validate(
         project_config,
         strict=project_strict,
