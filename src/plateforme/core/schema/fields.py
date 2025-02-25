@@ -212,6 +212,10 @@ class BaseFieldInfoDict(TypedDict, total=False):
     ``TITLE`` pattern as defined in the framework's regular expressions
     repository. Defaults to ``None``."""
 
+    field_title_generator: Callable[[str, 'FieldInfo[Any]'], str] | None
+    """The field title generator function. It is a callable that takes a field
+    name and returns title for it. Defaults to ``None``."""
+
     description: str | None
     """The description of the field. Defaults to ``None`` and uses the
     function's docstring if available."""
@@ -286,6 +290,10 @@ class ModelFieldInfoDict(TypedDict, total=False):
     """Whether or not to enforce strict validation of the field value.
     Defaults to ``None``."""
 
+    coerce_numbers_to_str: bool | None
+    """Whether or not to coerce numbers to strings (not applicable in `strict`
+    mode). Defaults to ``None``."""
+
     gt: float | None
     """The minimum value of the field. Defaults to ``None``."""
 
@@ -321,6 +329,12 @@ class ModelFieldInfoDict(TypedDict, total=False):
 
     union_mode: Literal['smart', 'left_to_right'] | None
     """The union mode for the field value. Defaults to ``None``."""
+
+    fail_fast: bool | None
+    """Whether or not to fail fast when validating the field value.
+    If ``True``, validation will stop on the first error. If ``False``, all
+    validation errors will be collected. This option can be applied only to
+    iterable types (list, tuple, set, and frozenset). Defaults to ``None``."""
 
     recursive_guard: str | None
     """A recursive guard to handle infinite recursion when validating and
@@ -470,6 +484,10 @@ class BackrefFieldInfoDict(TypedDict, total=False):
     """The human-readable name of the field. It must adhere to a specific
     ``TITLE`` pattern as defined in the framework's regular expressions
     repository. Defaults to ``None``."""
+
+    field_title_generator: Callable[[str, 'FieldInfo[Any]'], str] | None
+    """The field title generator function. It is a callable that takes a field
+    name and returns title for it. Defaults to ``None``."""
 
     description: str | None
     """The description of the field. Defaults to ``None`` and uses the
@@ -718,6 +736,8 @@ class FieldInfo(
             specific ``TITLE`` pattern as defined in the framework's regular
             expressions repository. It is inferred from the titleized version
             of the field identifier.
+        field_title_generator: The field title generator function. It is a
+            callable that takes a field name and returns title for it.
         description: The description of the field. Defaults to ``None`` and
             uses the function's docstring if available.
         examples: List of examples of the field. Defaults to ``None``.
@@ -839,6 +859,7 @@ class FieldInfo(
     # Internal
     _attributes_set: dict[str, Any]
     _complete: bool
+    evaluated: bool
     # Source field information
     source: str | None
     owner: type[Object]
@@ -850,6 +871,7 @@ class FieldInfo(
     alias: str
     alias_priority: int | None
     title: str
+    field_title_generator: Callable[[str, 'FieldInfo[Any]'], str] | None
     description: str | None
     examples: list[Any] | None
     deprecated: Deprecated | str | bool | None
@@ -894,6 +916,7 @@ class FieldInfo(
         '__weakref__',
         '_attributes_set',
         '_complete',
+        'evaluated',
         # Source field information
         'source',
         'owner',
@@ -905,6 +928,7 @@ class FieldInfo(
         'alias',
         'alias_priority',
         'title',
+        'field_title_generator',
         'description',
         'examples',
         'deprecated',
@@ -961,15 +985,15 @@ class FieldInfo(
         """
         # Clean up undefined keyword arguments
         kwargs_set = {k: v for k, v in kwargs.items() if v is not Undefined}
-        kwargs_copy: dict[str, Any] = {**kwargs_set}
+        kwargs: dict[str, Any] = {**kwargs_set}
 
         # Store attributes set
         self._attributes_set = kwargs_set
         self._complete = False
 
         # Set field default values
-        self.default = kwargs_copy.pop('default', Undefined)
-        self.default_factory = kwargs_copy.pop('default_factory', None)
+        self.default = kwargs.pop('default', Undefined)
+        self.default_factory = kwargs.pop('default_factory', None)
         # Check if default values are valid
         if self.default is Ellipsis:
             self.default = Undefined
@@ -979,11 +1003,11 @@ class FieldInfo(
             )
 
         # Extract field namespace and ownership
-        owner = kwargs_copy.pop('owner', None)
-        name = kwargs_copy.pop('name', None)
-        alias = kwargs_copy.pop('alias', None)
-        slug = kwargs_copy.pop('slug', None)
-        title = kwargs_copy.pop('title', None)
+        owner = kwargs.pop('owner', None)
+        name = kwargs.pop('name', None)
+        alias = kwargs.pop('alias', None)
+        slug = kwargs.pop('slug', None)
+        title = kwargs.pop('title', None)
 
         # Set field namespace and ownership
         self.owner = owner if owner is not None else Deferred
@@ -994,56 +1018,58 @@ class FieldInfo(
 
         # Set field annotation and metadata
         annotation, annotation_metadata = \
-            self._extract_metadata(kwargs_copy.pop('annotation', None))
+            self._extract_metadata(kwargs.pop('annotation', None))
         self.metadata = \
-            self._collect_metadata(kwargs_copy)
+            self._collect_metadata(kwargs)
         self.metadata += annotation_metadata
         self.annotation = \
             eval_type_lenient_deep(annotation, globals(), locals())
+        self.evaluated = False
 
         # Set field information
-        self.source = kwargs_copy.pop('source', None)
-        self.alias_priority = kwargs_copy.pop('alias_priority', None)
-        self.description = kwargs_copy.pop('description', None)
-        self.examples = kwargs_copy.pop('examples', None)
-        self.deprecated = kwargs_copy.pop('deprecated', None)
-        self.frozen = kwargs_copy.pop('frozen', None)
-        self.repr = kwargs_copy.pop('repr', True)
-        self.init = kwargs_copy.pop('init', True)
-        self.init_var = kwargs_copy.pop('init_var', None)
-        self.kw_only = kwargs_copy.pop('kw_only', None)
-        self.validation_alias = kwargs_copy.pop('validation_alias', None)
-        self.serialization_alias = kwargs_copy.pop('serialization_alias', None)
-        self.exclude = kwargs_copy.pop('exclude', None)
-        self.discriminator = kwargs_copy.pop('discriminator', None)
-        self.json_schema_extra = kwargs_copy.pop('json_schema_extra', None)
-        self.validate_default = kwargs_copy.pop('validate_default', None)
-        self.recursive_guard = kwargs_copy.pop('recursive_guard', None)
-        self.unique = kwargs_copy.pop('unique', None)
-        self.indexed = kwargs_copy.pop('indexed', None)
-        self.linked = kwargs_copy.pop('linked', None)
-        self.collection = kwargs_copy.pop('collection', None)
-        self.target = kwargs_copy.pop('target', None)
-        self.target_ref = kwargs_copy.pop('target_ref', None)
-        self.target_schemas = kwargs_copy.pop('target_schemas', None)
-        self.association = kwargs_copy.pop('association', None)
-        self.association_alias = kwargs_copy.pop('association_alias', None)
-        self.rel_attribute = kwargs_copy.pop('rel_attribute', None)
-        self.rel_backref = kwargs_copy.pop('rel_backref', None)
-        self.rel_cascade = kwargs_copy.pop('rel_cascade', None)
-        self.rel_load = kwargs_copy.pop('rel_load', None)
-        self.rel_extra = kwargs_copy.pop('rel_extra', None)
-        self.column_extra = kwargs_copy.pop('column_extra', None)
-        self.data_type = kwargs_copy.pop('data_type', None)
-        self.data_collation = kwargs_copy.pop('data_collation', None)
-        self.data_none_as_null = kwargs_copy.pop('data_none_as_null', None)
-        self.data_extra = kwargs_copy.pop('data_extra', None)
+        self.source = kwargs.pop('source', None)
+        self.alias_priority = kwargs.pop('alias_priority', None)
+        self.field_title_generator = kwargs.pop('field_title_generator', None)
+        self.description = kwargs.pop('description', None)
+        self.examples = kwargs.pop('examples', None)
+        self.deprecated = kwargs.pop('deprecated', None)
+        self.frozen = kwargs.pop('frozen', None)
+        self.repr = kwargs.pop('repr', True)
+        self.init = kwargs.pop('init', True)
+        self.init_var = kwargs.pop('init_var', None)
+        self.kw_only = kwargs.pop('kw_only', None)
+        self.validation_alias = kwargs.pop('validation_alias', None)
+        self.serialization_alias = kwargs.pop('serialization_alias', None)
+        self.exclude = kwargs.pop('exclude', None)
+        self.discriminator = kwargs.pop('discriminator', None)
+        self.json_schema_extra = kwargs.pop('json_schema_extra', None)
+        self.validate_default = kwargs.pop('validate_default', None)
+        self.recursive_guard = kwargs.pop('recursive_guard', None)
+        self.unique = kwargs.pop('unique', None)
+        self.indexed = kwargs.pop('indexed', None)
+        self.linked = kwargs.pop('linked', None)
+        self.collection = kwargs.pop('collection', None)
+        self.target = kwargs.pop('target', None)
+        self.target_ref = kwargs.pop('target_ref', None)
+        self.target_schemas = kwargs.pop('target_schemas', None)
+        self.association = kwargs.pop('association', None)
+        self.association_alias = kwargs.pop('association_alias', None)
+        self.rel_attribute = kwargs.pop('rel_attribute', None)
+        self.rel_backref = kwargs.pop('rel_backref', None)
+        self.rel_cascade = kwargs.pop('rel_cascade', None)
+        self.rel_load = kwargs.pop('rel_load', None)
+        self.rel_extra = kwargs.pop('rel_extra', None)
+        self.column_extra = kwargs.pop('column_extra', None)
+        self.data_type = kwargs.pop('data_type', None)
+        self.data_collation = kwargs.pop('data_collation', None)
+        self.data_none_as_null = kwargs.pop('data_none_as_null', None)
+        self.data_extra = kwargs.pop('data_extra', None)
 
         # Check for remaining keyword arguments
-        if kwargs_copy:
+        if kwargs:
             raise TypeError(
                 f"Unexpected remaining keyword arguments: "
-                f"{', '.join(kwargs_copy)}."
+                f"{', '.join(kwargs)}."
             )
 
         # Initialize field information namespace and ownership
@@ -1957,6 +1983,8 @@ class FieldInfo(
             alias=kwargs.pop('alias', Undefined),
             alias_priority=kwargs.pop('alias_priority', Undefined),
             title=kwargs.pop('title', Undefined),
+            field_title_generator=\
+                kwargs.pop('field_title_generator', Undefined),
             description=kwargs.pop('description', Undefined),
             examples=kwargs.pop('examples', Undefined),
             deprecated=kwargs.pop('deprecated', Undefined),
@@ -2343,6 +2371,7 @@ class FieldInfo(
     def __repr_args__(self) -> ReprArgs:
         for name, value in super().__repr_args__():
             if name in (
+                'evaluated',
                 'source',
                 'owner',
                 'linked',
@@ -2450,6 +2479,8 @@ class ComputedFieldInfo(_ComputedFieldInfo):
             expressions repository. When created from the decorator
             ``@computed_field``, it is inferred from the wrapped property
             identifier titleized.
+        field_title_generator: The field title generator function. It is a
+            callable that takes a field name and returns title for it.
         description: The description of the field. Defaults to ``None`` and
             uses the function's docstring if available.
         examples: List of examples of the field. Defaults to ``None``.
@@ -2473,6 +2504,7 @@ class ComputedFieldInfo(_ComputedFieldInfo):
     alias_priority: int | None
     slug: str
     title: str
+    field_title_generator: Callable[[str, 'ComputedFieldInfo'], str] | None
     description: str | None
     examples: list[Any] | None
     deprecated: Deprecated | str | bool | None
@@ -2503,6 +2535,7 @@ class ComputedFieldInfo(_ComputedFieldInfo):
             alias_priority=self.alias_priority,
             slug=self.slug,
             title=self.title,
+            field_title_generator=self.field_title_generator,
             description=self.description,
             examples=self.examples,
             deprecated=self.deprecated,

@@ -219,6 +219,16 @@ class BaseModelConfigDict(TypedDict, total=False):
     repository. It is inferred from the titleized version of the model
     identifier."""
 
+    model_title_generator: Callable[[type], str] | None
+    """A callable that takes a model class and returns the title for it.
+    Defaults to ``None``."""
+
+    field_title_generator: Callable[
+        [str, FieldInfo[Any] | ComputedFieldInfo], str
+    ] | None
+    """A callable that takes a field's name and info and returns title for it.
+    Defaults to ``None``."""
+
     str_to_lower: bool
     """Whether to convert strings to lowercase. Defaults to ``False``."""
 
@@ -285,6 +295,10 @@ class BaseModelConfigDict(TypedDict, total=False):
 
     ser_json_bytes: Literal['utf8', 'base64']
     """The encoding of JSON serialized bytes. Defaults to ``utf8``."""
+
+    val_json_bytes: Literal['utf8', 'base64', 'hex']
+    """The encoding of JSON serialized bytes to decode.
+    Defaults to ``utf8``."""
 
     ser_json_inf_nan: Literal['null', 'constants']
     """The encoding of JSON serialized infinity and NaN float values. Accepts
@@ -395,6 +409,19 @@ class ModelConfig(ConfigWrapper):
     repository. It is inferred from the titleized version of the model
     identifier."""
 
+    model_title_generator: Annotated[
+        Callable[[type], str] | None, 'pydantic'
+    ] = None
+    """A callable that takes a model class and returns the title for it.
+    Defaults to ``None``."""
+
+    field_title_generator: Annotated[
+        Callable[[str, FieldInfo[Any] | ComputedFieldInfo], str] | None,
+        'pydantic'
+    ] = None
+    """A callable that takes a field's name and info and returns title for it.
+    Defaults to ``None``."""
+
     str_to_lower: Annotated[bool, 'pydantic'] = False
     """Whether to convert strings to lowercase. Defaults to ``False``."""
 
@@ -477,6 +504,12 @@ class ModelConfig(ConfigWrapper):
 
     ser_json_bytes: Annotated[Literal['utf8', 'base64'], 'pydantic'] = 'utf8'
     """The encoding of JSON serialized bytes. Defaults to ``utf8``."""
+
+    val_json_bytes: Annotated[
+        Literal['utf8', 'base64', 'hex'], 'pydantic'
+    ] = 'utf8'
+    """The encoding of JSON serialized bytes to decode.
+    Defaults to ``utf8``."""
 
     ser_json_inf_nan: Annotated[
         Literal['null', 'constants'], 'pydantic'
