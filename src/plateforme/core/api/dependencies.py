@@ -10,7 +10,8 @@ This module provides utilities for managing dependencies within the Plateforme
 framework.
 """
 
-from typing import Annotated, AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator
+from typing import Annotated
 
 from ..database.sessions import (
     AsyncSession,

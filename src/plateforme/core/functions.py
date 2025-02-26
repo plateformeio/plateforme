@@ -11,10 +11,11 @@ This module provides utilities for functions within the Plateforme framework.
 
 import inspect
 import typing
+from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import wraps
 from inspect import Parameter
-from typing import Any, Awaitable, Callable, Iterator, ParamSpec, TypeVar
+from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from .context import CALLER_CONTEXT
 from .typing import is_async

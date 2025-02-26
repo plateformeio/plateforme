@@ -44,11 +44,9 @@ def package_dir() -> str:
     from pathlib import Path
 
     path = Path(__file__).parents[1].absolute()
-
     if path.name == 'src':
         path = path.parent
-
-    return path
+    return path.as_posix()
 
 
 @typing.overload

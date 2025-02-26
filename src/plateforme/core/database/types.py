@@ -1805,7 +1805,7 @@ def combine_type_engines_processors(
     # Helper function to extract and combine processors
     def extract_and_combine(
         key: str
-    ) -> Callable[[Any | None, Dialect], Any | None]:
+    ) -> Callable[[Any | None, Dialect], Any | None] | None:
         processors = []
         for engine in engines:
             if engine is None:
@@ -1814,7 +1814,9 @@ def combine_type_engines_processors(
             if processor is None:
                 continue
             processors.append(processor)
-        return _combine_processors(*processors) if processors else None
+        if processors:
+            return _combine_processors(*processors)  # type: ignore
+        return None
 
     return TypeEngineProcessors(
         before=extract_and_combine('before'),

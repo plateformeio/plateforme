@@ -153,7 +153,11 @@ else:
 
 
 FunctionLenientType = Union[
-    ClassMethodType, StaticMethodType, FunctionType, MethodType
+    Callable[..., Any],
+    ClassMethodType,
+    StaticMethodType,
+    FunctionType,
+    MethodType,
 ]
 """A type alias for lenient function types including class and static methods,
 and standard functions with any arguments."""

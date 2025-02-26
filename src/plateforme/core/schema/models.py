@@ -656,7 +656,7 @@ class ModelMeta(ConfigurableMeta, _ModelMeta):
         __pydantic_resource__: 'ResourceType | None'
         model_adapter: TypeAdapterList['BaseModel']
         model_config: ModelConfig
-        model_fields: dict[str, ModelFieldInfo]
+        model_fields: dict[str, ModelFieldInfo]  # type: ignore
 
     def __new__(
         mcls,
@@ -1846,7 +1846,7 @@ def create_model(
         __doc__=__doc__,
         __base__=__base__,
         __module__=__module__,  # type: ignore[arg-type]
-        __validators__=__validators__,
+        __validators__=__validators__,  # type: ignore[arg-type]
         __cls_kwargs__=__cls_kwargs__,
         __slots__=None,
         **field_definitions,
@@ -2125,7 +2125,7 @@ def create_root_model(
         __doc__=__doc__,
         __base__=__base__,
         __module__=__module__,  # type: ignore[arg-type]
-        __validators__=__validators__,
+        __validators__=__validators__,  # type: ignore[arg-type]
         __cls_kwargs__=__cls_kwargs__,
         __slots__=None,
         root=root,
@@ -2669,7 +2669,7 @@ def create_discriminated_model(
         __doc__=__doc__,
         __base__=__base__,
         __module__=__module__,  # type: ignore[arg-type]
-        __validators__=__validators__,
+        __validators__=__validators__,  # type: ignore[arg-type]
         __cls_kwargs__=__cls_kwargs__,
         __slots__=None,
         root=root,

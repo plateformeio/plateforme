@@ -18,8 +18,8 @@ excludes quotes, ideal for creating Python-compatible string outputs.
 """
 
 import dataclasses
-from collections.abc import Iterable
-from typing import Any, Callable, Generator, Iterable
+from collections.abc import Generator, Iterable
+from typing import Any, Callable
 
 __all__ = (
     'PlainRepresentation',
@@ -92,10 +92,7 @@ class Representation:
         """Name of the instance's class, used in `__repr__`."""
         return self.__class__.__name__
 
-    def __repr_str__(
-        self,
-        separator: str = ', ',
-    ) -> str:
+    def __repr_str__(self, separator: str = ', ') -> str:
         """String representation of the instance's attributes.
 
         It is used in `__str__` and `__repr__` methods.

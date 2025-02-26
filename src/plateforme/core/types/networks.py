@@ -466,7 +466,7 @@ class EngineMap(dict[str, EngineUrl]):
 # MARK: IP
 
 IPvAddressFactoryAlias = Union[
-    ipaddress.IPv4Address | ipaddress.IPv6Address | PydanticIPvAnyAddress
+    ipaddress.IPv4Address, ipaddress.IPv6Address, PydanticIPvAnyAddress
 ]
 """A type alias for the IP address factory type."""
 
@@ -509,7 +509,7 @@ class IPvAddressFactory(BaseTypeFactory[IPvAddressFactoryAlias]):
         elif version == 6:
             type_ = ipaddress.IPv6Address
         else:
-            type_ = PydanticIPvAnyAddress
+            type_ = PydanticIPvAnyAddress  # type: ignore[assignment]
 
         return super().__new__(
             cls,
@@ -535,7 +535,7 @@ else:
 
 
 IPvInterfaceFactoryAlias = Union[
-    ipaddress.IPv4Interface | ipaddress.IPv6Interface | PydanticIPvAnyInterface
+    ipaddress.IPv4Interface, ipaddress.IPv6Interface, PydanticIPvAnyInterface
 ]
 """A type alias for the IP interface factory type."""
 
@@ -578,7 +578,7 @@ class IPvInterfaceFactory(BaseTypeFactory[IPvInterfaceFactoryAlias]):
         elif version == 6:
             type_ = ipaddress.IPv6Interface
         else:
-            type_ = PydanticIPvAnyInterface
+            type_ = PydanticIPvAnyInterface  # type: ignore[assignment]
 
         return super().__new__(
             cls,
@@ -604,7 +604,7 @@ else:
 
 
 IPvNetworkFactoryAlias = Union[
-    ipaddress.IPv4Network | ipaddress.IPv6Network | PydanticIPvAnyNetwork
+    ipaddress.IPv4Network, ipaddress.IPv6Network, PydanticIPvAnyNetwork
 ]
 """A type alias for the IP network factory type."""
 
@@ -647,7 +647,7 @@ class IPvNetworkFactory(BaseTypeFactory[IPvNetworkFactoryAlias]):
         elif version == 6:
             type_ = ipaddress.IPv6Network
         else:
-            type_ = PydanticIPvAnyNetwork
+            type_ = PydanticIPvAnyNetwork  # type: ignore[assignment]
 
         return super().__new__(
             cls,

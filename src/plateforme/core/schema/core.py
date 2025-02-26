@@ -12,9 +12,10 @@ framework. It extends Pydantic's core schema features.
 
 import dataclasses
 import typing
+from collections.abc import Iterator
 from contextlib import contextmanager
 from enum import IntEnum
-from typing import Iterator, Literal
+from typing import Literal
 
 from pydantic.annotated_handlers import (
     GetCoreSchemaHandler,

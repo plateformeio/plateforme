@@ -34,7 +34,7 @@ from .database.sessions import AsyncSession, async_session_manager
 from .database.utils import build_query
 from .expressions import Filter, Sort, Symbol
 from .patterns import WILDCARD, RegexPattern, parse_selection
-from .representations import ReprArgs, Representation
+from .representations import PlainRepresentation, ReprArgs, Representation
 from .schema import core as core_schema
 from .schema.core import (
     CoreSchema,
@@ -707,7 +707,7 @@ class BaseSelector(
 
         # Serialize selector
         if mode == 'json':
-            return cls.__repr_str__(obj, separator=';')
+            return ';'.join(f'{k}={v}' for k, v in cls.__repr_args__(obj))
         else:
             return obj.copy()
 
@@ -1028,9 +1028,10 @@ class BaseSelector(
             f"SQLAlchemy data type."
         )
 
-    def __repr_args__(self) -> ReprArgs:
+    def __repr_args__(self: dict[str, Any]) -> ReprArgs:
         for name, value in self.items():
-            yield name, '?' if value is Deferred else value
+            value = PlainRepresentation('?' if value is Deferred else value)
+            yield name, value
 
     def __repr_source__(self) -> str | None:
         resource = self.__config_resource__
@@ -1099,9 +1100,10 @@ class Id(BaseSelector[_T], Generic[_T]):
         assert result is None or not isinstance(result, Sequence)
         return result
 
-    def __repr_args__(self) -> ReprArgs:
+    def __repr_args__(self: dict[str, Any]) -> ReprArgs:
         value = self.get('id')
-        yield None, '?' if value is Deferred else value
+        value = PlainRepresentation('?' if value is Deferred else value)
+        yield None, value
 
     def __repr_source__(self) -> str | None:
         resource = self.__config_resource__

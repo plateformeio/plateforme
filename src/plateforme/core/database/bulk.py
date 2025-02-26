@@ -13,8 +13,9 @@ Plateforme framework using SQLAlchemy features.
 import dataclasses
 import typing
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from threading import Lock
-from typing import Any, Awaitable, Generator, Generic, Literal, TypeVar
+from typing import Any, Awaitable, Generic, Literal, TypeVar
 
 from ..errors import SessionError
 from ..typing import is_exception, is_proxy

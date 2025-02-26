@@ -168,7 +168,7 @@ omit = []
 
 [tool.coverage.paths]
 source = ["src/plateforme", "*/plateforme/src/plateforme"]
-tests = ["tests", "private/tests"]
+tests = ["tests", "private/testing"]
 
 [tool.coverage.report]
 precision = 2
@@ -187,7 +187,7 @@ exclude_lines = [
 
 [tool.mypy]
 python_version = "3.11"
-exclude = ["scripts", "src/plateforme/cli/templates"]
+exclude = ["private", "scripts"]
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_subclassing_any = true
