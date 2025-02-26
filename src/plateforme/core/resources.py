@@ -3484,30 +3484,31 @@ class BaseResource(
         frozen=True,
     )
 
-    # Base resource specification
-    class Model(BaseModel):
-        id: int | UUID4 | None
-        type_: str
-        ...
+    if typing.TYPE_CHECKING:
+        # Base resource specification
+        class Model(BaseModel):
+            id: int | UUID4 | None
+            type_: str
+            ...
 
-    # Base resource CRUD specification
-    class Create(BaseModel):
-        id: int | UUID4 | None
-        type_: str | None
-        ...
+        # Base resource CRUD specification
+        class Create(BaseModel):
+            id: int | UUID4 | None
+            type_: str | None
+            ...
 
-    class Read(BaseModel):
-        id: int | UUID4 | None
-        type_: str | None
-        ...
+        class Read(BaseModel):
+            id: int | UUID4 | None
+            type_: str | None
+            ...
 
-    class Update(BaseModel):
-        ...
+        class Update(BaseModel):
+            ...
 
-    class Upsert(BaseModel):
-        id: int | UUID4 | None
-        type_: str | None
-        ...
+        class Upsert(BaseModel):
+            id: int | UUID4 | None
+            type_: str | None
+            ...
 
     if typing.TYPE_CHECKING:
         def __init_subclass__(
