@@ -1212,9 +1212,9 @@ def is_model(obj: Any) -> TypeIs['ModelType']:
     """Check if the given object is a model type."""
     if not isinstance(obj, type):
         return False
-    if check_config(obj, type_='model'):
-        return True
-    return False
+    if not check_config(obj, type_='model'):
+        return False
+    return True
 
 
 def is_optional(annotation: Any) -> bool:
@@ -1275,18 +1275,18 @@ def is_resource(obj: Any) -> TypeIs['ResourceType']:
     """Check if the given object is a resource type."""
     if not isinstance(obj, type):
         return False
-    if check_config(obj, type_='resource'):
-        return True
-    return False
+    if not check_config(obj, type_='resource'):
+        return False
+    return True
 
 
 def is_selector(obj: Any) -> TypeIs['SelectorType']:
     """Check if the given object is a selector type."""
     if not isinstance(obj, type):
         return False
-    if check_config(obj, type_='selector'):
-        return True
-    return False
+    if not check_config(obj, type_='selector'):
+        return False
+    return True
 
 
 def is_union(annotation: Any) -> bool:

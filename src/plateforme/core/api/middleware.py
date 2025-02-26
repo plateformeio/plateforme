@@ -46,6 +46,8 @@ class BulkMiddleware(BaseHTTPMiddleware):
         self,
         request: Request,
         call_next: RequestResponseEndpoint,
+        *,
+        auto_commit: bool = False,
     ) -> Response:
         """Handle bulk operations on resources."""
 
@@ -53,22 +55,19 @@ class BulkMiddleware(BaseHTTPMiddleware):
             async with session.bulk():
                 response = await call_next(request)
 
-            try:
-                status = response.status_code
-                if get_status_class(status) == 'HTTP_2':
-                    await session.commit()
-                else:
-                    await session.rollback()
+            if auto_commit:
+                try:
+                    status = response.status_code
+                    if get_status_class(status) == 'HTTP_2':
+                        await session.commit()
+                    else:
+                        await session.rollback()
 
-            except Exception as error:
-                await session.rollback()
-                raise HTTPException(
-                    status_code=500,
-                    detail=(
-                        f"An error occurred while finalizing the session: "
-                        f"{error}"
-                    ),
-                )
+                except Exception as error:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="An error occurred while committing session.",
+                    )
 
             return response
 

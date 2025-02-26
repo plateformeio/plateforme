@@ -517,7 +517,8 @@ async def async_session_manager(
     using: AsyncSessionFactory | None = None,
     new: bool = False,
     on_missing: Literal['create', 'raise'] = 'create',
-    commit: Literal['auto', 'expire', 'preserve'] | None = None,
+    on_exit: Literal['commit', 'flush', 'rollback'] | None = None,
+    expire: bool | None = None,
 ) -> AsyncGenerator[AsyncSession, None]:
     """An async session context manager for `AsyncSession` objects.
 
@@ -535,15 +536,14 @@ async def async_session_manager(
         on_missing: The behavior to follow when no current session is
             available, either to create a new session or raise an error.
             Defaults to ``'create'``.
-        commit: The commit behavior to follow after the operation completes.
-            When set to ``None``, no commit action is performed, and the
-            session must be committed or rolled back manually. Otherwise, it
-            can be set to automatically commit on success or rollback on
-            failure with the following options:
-            - ``'auto'``: Automatically commit with default expire behavior.
-            - ``'expire'``: Expire all instances after the commit.
-            - ``'preserve'``: Preserve all instances after the commit.
+        on_exit: The action to perform after the operation completes. If set to
+            ``None``, no action is performed after the operation. Otherwise, it
+            can be set to either ``'commit'``, ``'flush'``, or ``'rollback'``.
             Defaults to ``None``.
+        expire: Whether to expire all instances after the commit. If set to
+            ``True``, all instances are expired after the commit. If set to
+            ``False``, all instances are preserved after the commit. Otherwise,
+            the session default behavior is used. Defaults to ``None``.
 
     Returns:
         An `AsyncSession` instance.
@@ -555,11 +555,21 @@ async def async_session_manager(
     """
     session = SESSION_CONTEXT.get()
 
+    # Helper function to finalize the session
+    async def finalize(_session: AsyncSession) -> None:
+        if on_exit == 'commit':
+            await _session.commit(expire=expire)
+        elif on_exit == 'flush':
+            await _session.flush()
+        elif on_exit == 'rollback':
+            await _session.rollback()
+
     # Retrieve session
     if new is False:
         if session is not None:
             if isinstance(session, AsyncSession):
                 yield session
+                await finalize(session)
                 return
             raise RuntimeError(
                 f"Invalid session type found in the current context. Expected "
@@ -593,18 +603,12 @@ async def async_session_manager(
     try:
         yield session
     except Exception as error:
-        if commit is not None:
-            await session.rollback()
+        await session.rollback()
         raise DatabaseError(
             "An error occurred while executing a database operation."
         ) from error
     else:
-        if commit == 'auto':
-            await session.commit()
-        elif commit == 'expire':
-            await session.commit(expire=True)
-        elif commit == 'preserve':
-            await session.commit(expire=False)
+        await finalize(session)
     finally:
         SESSION_CONTEXT.reset(token)
         if isinstance(factory, _async_scoped_session):
@@ -619,7 +623,8 @@ def session_manager(
     using: SessionFactory | None = None,
     new: bool = False,
     on_missing: Literal['create', 'raise'] = 'create',
-    commit: Literal['auto', 'expire', 'preserve'] | None = None,
+    on_exit: Literal['commit', 'flush', 'rollback'] | None = None,
+    expire: bool | None = None,
 ) -> Generator[Session, None, None]:
     """A sync session context manager for `Session` objects.
 
@@ -637,15 +642,14 @@ def session_manager(
         on_missing: The behavior to follow when no current session is
             available, either to create a new session or raise an error.
             Defaults to ``'create'``.
-        commit: The commit behavior to follow after the operation completes.
-            When set to ``None``, no commit action is performed, and the
-            session must be committed or rolled back manually. Otherwise, it
-            can be set to automatically commit on success or rollback on
-            failure with the following options:
-            - ``'auto'``: Automatically commit with default expire behavior.
-            - ``'expire'``: Expire all instances after the commit.
-            - ``'preserve'``: Preserve all instances after the commit.
+        on_exit: The action to perform after the operation completes. If set to
+            ``None``, no action is performed after the operation. Otherwise, it
+            can be set to either ``'commit'``, ``'flush'``, or ``'rollback'``.
             Defaults to ``None``.
+        expire: Whether to expire all instances after the commit. If set to
+            ``True``, all instances are expired after the commit. If set to
+            ``False``, all instances are preserved after the commit. Otherwise,
+            the session default behavior is used. Defaults to ``None``.
 
     Returns:
         A `Session` instance.
@@ -657,11 +661,21 @@ def session_manager(
     """
     session = SESSION_CONTEXT.get()
 
+    # Helper function to finalize the session
+    def finalize(_session: Session) -> None:
+        if on_exit == 'commit':
+            _session.commit(expire=expire)
+        elif on_exit == 'flush':
+            _session.flush()
+        elif on_exit == 'rollback':
+            _session.rollback()
+
     # Retrieve session
     if new is False:
         if session is not None:
             if isinstance(session, Session):
                 yield session
+                finalize(session)
                 return
             raise RuntimeError(
                 f"Invalid session type found in the current context. Expected "
@@ -695,18 +709,12 @@ def session_manager(
     try:
         yield session
     except Exception as error:
-        if commit is not None:
-            session.rollback()
+        session.rollback()
         raise DatabaseError(
             "An error occurred while executing a database operation."
         ) from error
     else:
-        if commit == 'auto':
-            session.commit()
-        elif commit == 'expire':
-            session.commit(expire=True)
-        elif commit == 'preserve':
-            session.commit(expire=False)
+        finalize(session)
     finally:
         SESSION_CONTEXT.reset(token)
         if isinstance(factory, _scoped_session):

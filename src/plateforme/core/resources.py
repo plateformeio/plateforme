@@ -154,7 +154,7 @@ from .schema.models import (
     create_model,
 )
 from .schema.types import TypeAdapterList
-from .selectors import BaseSelector, Key, KeyList
+from .selectors import BaseSelector, Id, Key, KeyList
 from .services import (
     BaseService,
     BaseServiceConfigDict,
@@ -291,6 +291,11 @@ class ResourceConfigDict(BaseModelConfigDict, total=False):
     to avoid too many resources being returned. Defaults to ``20``.
     """
 
+    auto_commit: bool
+    """Whether to automatically commit the session after the resource method
+    execution. It is used to manage the session commit behavior for the
+    resource methods. Defaults to ``False``."""
+
     id_strategy: Literal['auto', 'manual', 'hybrid']
     """The identifier strategy to use for the resource. It defines how the
     identifier is generated for the resource and can be set to one of the
@@ -408,6 +413,11 @@ class ResourceConfig(ModelConfig):
     used when generating the API routes for resources within the application
     to avoid too many resources being returned. Defaults to ``20``.
     """
+
+    auto_commit: bool = False
+    """Whether to automatically commit the session after the resource method
+    execution. It is used to manage the session commit behavior for the
+    resource methods. Defaults to ``False``."""
 
     id_strategy: Literal['auto', 'manual', 'hybrid'] = 'auto'
     """The identifier strategy to use for the resource. It defines how the
@@ -1426,9 +1436,9 @@ class ResourceManager(Manager[Resource]):
             ``True`` if a resource instance exists that matches the provided
             filters, otherwise ``False``.
         """
-        async def query(session: AsyncSession) -> bool:
+        async def query(_session: AsyncSession) -> bool:
             query = select(select(self.resource).where(**kwargs).exists())
-            buffer = await session.execute(query)
+            buffer = await _session.execute(query)
             return buffer.scalar() or False
 
         if __session:
@@ -1461,9 +1471,9 @@ class ResourceManager(Manager[Resource]):
             ``None`` if no resource instance is found for the provided filters
             instead of raising an exception.
         """
-        async def query(session: AsyncSession) -> Resource | None:
+        async def query(_session: AsyncSession) -> Resource | None:
             query = select(self.resource).filter_by(**kwargs).limit(1)
-            buffer = await session.execute(query)
+            buffer = await _session.execute(query)
             return buffer.scalar()
 
         if __session:
@@ -1490,9 +1500,9 @@ class ResourceManager(Manager[Resource]):
         Returns:
             A collection of resource instances that match the provided filters.
         """
-        async def query(session: AsyncSession) -> Sequence[Resource]:
+        async def query(_session: AsyncSession) -> Sequence[Resource]:
             query = select(self.resource).filter_by(**kwargs)
-            buffer = await session.execute(query)
+            buffer = await _session.execute(query)
             return buffer.unique().scalars().all()
 
         if __session:
@@ -1530,9 +1540,9 @@ class ResourceManager(Manager[Resource]):
             exception if no resource instance is found for the provided filters
             instead of returning ``None``.
         """
-        async def query(session: AsyncSession) -> Resource:
+        async def query(_session: AsyncSession) -> Resource:
             query = select(self.resource).filter_by(**kwargs).limit(2)
-            buffer = await session.execute(query)
+            buffer = await _session.execute(query)
             result = buffer.unique().scalars().all()
             if len(result) != 1:
                 raise ValueError(
@@ -3758,7 +3768,7 @@ class BaseResource(
         self,
         *,
         session: AsyncSession | None = None,
-        commit: bool = False,
+        save: Literal['commit', 'flush', True] | None = None,
         merge: bool = False,
     ) -> Self:
         """Add the resource instance to the database.
@@ -3781,11 +3791,13 @@ class BaseResource(
             session: The session to use for the operation. If not provided, the
                 session in the current context is used.
                 Defaults to ``None``.
-            commit: Whether to commit the transaction after adding the resource
-                instance to the database. If set to ``True``, the transaction
-                is automatically committed, otherwise the transaction is not
-                committed and must be manually committed later.
-                Defaults to ``False``.
+            save: The mode to use for persisting the changes in the database.
+                If set to ``'commit'`` or ``True``, the transaction is
+                automatically committed after adding the resource instance to
+                the database. If set to ``'flush'``, the transaction is flushed
+                after adding the resource instance to the database. Otherwise,
+                the transaction is not committed or flushed and should be
+                manually committed later. Defaults to ``None``.
             merge: Whether to merge the resource instance with the database
                 session. If set to ``True``, the resource instance is merged
                 with the session before adding it to the database.
@@ -3795,13 +3807,14 @@ class BaseResource(
             PlateformeError: If the resource instance could not be added to the
                 database.
         """
-        # Helper to add the resource instance to the database
         async def execute(obj: Self, _session: AsyncSession) -> Self:
             if merge:
                 obj = await _session.merge(self)
             _session.add(obj)
-            if commit:
+            if save == 'commit' or save is True:
                 await _session.commit(expire=False)
+            elif save == 'flush':
+                await _session.flush()
             return obj
 
         try:
@@ -3888,9 +3901,9 @@ class BaseResource(
         self,
         *,
         session: AsyncSession | None = None,
-        commit: bool = False,
+        save: Literal['commit', 'flush', True] | None = None,
         merge: bool = False,
-    ) -> None:
+    ) -> Self:
         """Delete the resource instance from the database.
 
         It marks an instance as deleted.
@@ -3910,11 +3923,13 @@ class BaseResource(
             session: The session to use for the operation. If not provided, the
                 session in the current context is used.
                 Defaults to ``None``.
-            commit: Whether to commit the transaction after adding the resource
-                instance to the database. If set to ``True``, the transaction
-                is automatically committed, otherwise the transaction is not
-                committed and must be manually committed later.
-                Defaults to ``False``.
+            save: The mode to use for persisting the changes in the database.
+                If set to ``'commit'`` or ``True``, the transaction is
+                automatically committed after deleting the resource instance
+                from the database. If set to ``'flush'``, the transaction is
+                flushed after deleting the resource instance from the database.
+                Otherwise, the transaction is not committed or flushed and
+                should be manually committed later. Defaults to ``None``.
             merge: Whether to merge the resource instance with the database
                 session. If set to ``True``, the resource instance is merged
                 with the session before deleting it from the database.
@@ -3924,13 +3939,15 @@ class BaseResource(
             PlateformeError: If the resource instance could not be deleted from
                 the database.
         """
-        # Helper to delete the resource instance from the database
-        async def execute(obj: Self, _session: AsyncSession) -> None:
+        async def execute(obj: Self, _session: AsyncSession) -> Self:
             if merge:
                 obj = await _session.merge(obj)
             await _session.delete(obj)
-            if commit:
-                await _session.commit(expire=True)
+            if save == 'commit' or save is True:
+                await _session.commit(expire=False)
+            elif save == 'flush':
+                await _session.flush()
+            return obj
 
         try:
             if session:
@@ -4598,6 +4615,17 @@ class BaseResource(
             A `pydantic-core` core schema.
         """
         # Handle key validation
+        def validate_selector(
+            obj: BaseSelector[Resource]
+        ) -> BaseSelector[Resource]:
+            if obj.config.collection:
+                raise ValueError(
+                    f"Invalid selector {obj!r} for resource "
+                    f"{cls.__qualname__!r}. Selectors with collection "
+                    "configurations are not allowed."
+                )
+            return obj
+
         def validate_key(obj: int | str) -> Key[Resource]:
             return Key.validate(obj, resource=cls, validate_assignment=True)
 
@@ -4638,7 +4666,12 @@ class BaseResource(
                 core_schema.no_info_after_validator_function(
                     cls.__pydantic_after_validator__,
                     core_schema.union_schema([
+                        core_schema.is_instance_schema(Id),
                         core_schema.is_instance_schema(Key),
+                        core_schema.no_info_after_validator_function(
+                            validate_selector,
+                            core_schema.is_instance_schema(BaseSelector),
+                        ),
                         key_schema,
                         model_schema,
                     ]),
@@ -4720,7 +4753,7 @@ class BaseResource(
     @classmethod
     def __pydantic_after_validator__(
         cls: type[Resource],
-        obj: Key[Resource] | BaseModel
+        obj: BaseSelector[Resource] | BaseModel
     ) -> Resource:
         """The inner resource after validator function.
 
@@ -4740,7 +4773,7 @@ class BaseResource(
         # Retrieve session bulk
         bulk = SESSION_BULK_CONTEXT.get()
 
-        if isinstance(obj, Key):
+        if isinstance(obj, BaseSelector):
             # Construct a new resource instance from the key entries
             instance = cls.resource_construct(set(obj.keys()), **obj)
             if bulk is not None:
@@ -4954,6 +4987,7 @@ def _create_resource_endpoint(
     """
     # Resolve endpoint owner
     owner = getattr(method, '__config_owner__', resource_path.root)
+    owner = typing.cast(ResourceType, owner)
 
     # Helper to resolve forward refs and resource schema models in annotations
     def resolve_types(
@@ -5017,7 +5051,22 @@ def _create_resource_endpoint(
             return None
 
     # Prepare method with async and keyword-only arguments
-    wrapped_method = make_async(make_kw_only(method))
+    async_method = make_async(make_kw_only(method))
+    if not owner.resource_config.auto_commit:
+        wrapped_method = async_method
+    else:
+        if not session:
+            async def async_method_comitted(**data: Any) -> Any:
+                async with async_session_manager(
+                    on_exit='commit', expire=False
+                ):
+                    return await async_method(**data)
+        else:
+            async def async_method_comitted(**data: Any) -> Any:
+                result = await async_method(**data)
+                await session.commit(expire=False)
+                return result
+        wrapped_method = async_method_comitted
 
     def create_redirect() -> APIEndpoint[Any, Any]:
         info = resource_path._create_path_info(skip_last_node=skip_last_node)
