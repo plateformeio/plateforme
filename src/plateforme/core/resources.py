@@ -3442,9 +3442,6 @@ class BaseResource(
         resource_package: ClassVar['Package']
         resource_schemas: ClassVar[dict[str, DiscriminatedModelType]]
 
-        # Model schema
-        Model: ClassVar[ModelType]
-
         # The non-existent keyword argument "init=False" is used below so that
         # "@dataclass_transform" doesn't pass these attributes as valid
         # keyword arguments to the class initializer.
@@ -3486,6 +3483,31 @@ class BaseResource(
         init=False,
         frozen=True,
     )
+
+    # Base resource specification
+    class Model(BaseModel):
+        id: int | UUID4 | None
+        type_: str
+        ...
+
+    # Base resource CRUD specification
+    class Create(BaseModel):
+        id: int | UUID4 | None
+        type_: str | None
+        ...
+
+    class Read(BaseModel):
+        id: int | UUID4 | None
+        type_: str | None
+        ...
+
+    class Update(BaseModel):
+        ...
+
+    class Upsert(BaseModel):
+        id: int | UUID4 | None
+        type_: str | None
+        ...
 
     if typing.TYPE_CHECKING:
         def __init_subclass__(
@@ -3864,7 +3886,7 @@ class BaseResource(
                 _fields_set, **_model.model_dump(), **data
             )
         else:
-            model = _model
+            model = _model  # type: ignore[assignment]
 
         # Return a new resource instance without triggering validation
         with validation_manager(mode='disabled'):
@@ -4864,24 +4886,6 @@ class CRUDResource(BaseResource):
 
     __abstract__ = True
     __config__ = ResourceConfig(services=(CRUDService,))
-
-    class Create(BaseModel):
-        id: int | UUID4 | None
-        type_: str | None
-        ...
-
-    class Read(BaseModel):
-        id: int | UUID4 | None
-        type_: str | None
-        ...
-
-    class Update(BaseModel):
-        ...
-
-    class Upsert(BaseModel):
-        id: int | UUID4 | None
-        type_: str | None
-        ...
 
 
 # MARK: Resource Proxy
