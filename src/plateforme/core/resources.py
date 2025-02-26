@@ -3465,6 +3465,7 @@ class BaseResource(
         description='Resource identifier',
         frozen=True,
     )
+
     type_: str = Field(
         default=Deferred,
         validate_default=False,
@@ -4789,6 +4790,24 @@ class CRUDResource(BaseResource):
 
     __abstract__ = True
     __config__ = ResourceConfig(services=(CRUDService,))
+
+    class Create(BaseModel):
+        id: int | UUID4 | None
+        type_: str | None
+        ...
+
+    class Read(BaseModel):
+        id: int | UUID4 | None
+        type_: str | None
+        ...
+
+    class Update(BaseModel):
+        ...
+
+    class Upsert(BaseModel):
+        id: int | UUID4 | None
+        type_: str | None
+        ...
 
 
 # MARK: Resource Proxy

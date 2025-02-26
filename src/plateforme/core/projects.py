@@ -380,7 +380,7 @@ class ProjectInfo(BaseModel):
         )
 
     def __repr_args__(self) -> ReprArgs:
-        return [(None, self.name)]
+        yield (None, self.name)
 
 
 # MARK: Utilities

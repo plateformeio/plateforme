@@ -11,7 +11,6 @@ framework using Pydantic features.
 """
 
 import typing
-import uuid
 from collections.abc import Sequence
 from typing import Any, Literal, Protocol, Self, Type, TypeVar
 
@@ -27,6 +26,7 @@ from .schema.models import (
     collect_models,
 )
 from .schema.types import TypeAdapterList
+from .types.uuid import UUID4
 from .typing import (
     Annotation,
     ClassMethodType,
@@ -167,7 +167,7 @@ class BaseSpec(Protocol):
             facade._register_schema(model.__qualname__, __base__=model)
 
     # Class fields
-    id: int | uuid.UUID | None
+    id: int | UUID4 | None
     type_: str
 
     # Class attributes
@@ -331,7 +331,7 @@ class BaseSpec(Protocol):
 
     # Schemas
     class Model:
-        id: int | uuid.UUID | None
+        id: int | UUID4 | None
         type_: str | None
         ...
 
@@ -342,12 +342,12 @@ class CRUDSpec(BaseSpec):
     """The CRUD specification."""
 
     class Create(BaseModel):
-        id: int | uuid.UUID | None
+        id: int | UUID4 | None
         type_: str | None
         ...
 
     class Read(BaseModel):
-        id: int | uuid.UUID | None
+        id: int | UUID4 | None
         type_: str | None
         ...
 
@@ -355,7 +355,7 @@ class CRUDSpec(BaseSpec):
         ...
 
     class Upsert(BaseModel):
-        id: int | uuid.UUID | None
+        id: int | UUID4 | None
         type_: str | None
         ...
 

@@ -109,7 +109,6 @@ class Representation:
             value = repr(value)
             value = value if not name else f'{name}={value}'
             args.append(value)
-
         return separator.join(args)
 
     def __repr__(self) -> str:

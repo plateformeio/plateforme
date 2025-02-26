@@ -34,6 +34,7 @@ from .database.sessions import AsyncSession, async_session_manager
 from .database.utils import build_query
 from .expressions import Filter, Sort, Symbol
 from .patterns import WILDCARD, RegexPattern, parse_selection
+from .representations import ReprArgs, Representation
 from .schema import core as core_schema
 from .schema.core import (
     CoreSchema,
@@ -270,6 +271,7 @@ class SelectorMeta(ABCMeta, ConfigurableMeta):
 
 class BaseSelector(
     dict[str, Any],
+    Representation,
     Configurable[SelectorConfig],
     Generic[_T],
     metaclass=SelectorMeta,
@@ -705,10 +707,7 @@ class BaseSelector(
 
         # Serialize selector
         if mode == 'json':
-            return ';'.join(
-                f'{k}={"?" if v is Deferred else v}'
-                for k, v in obj.items()
-            )
+            return cls.__repr_str__(obj, separator=';')
         else:
             return obj.copy()
 
@@ -1029,6 +1028,10 @@ class BaseSelector(
             f"SQLAlchemy data type."
         )
 
+    def __repr_args__(self) -> ReprArgs:
+        for name, value in self.items():
+            yield name, '?' if value is Deferred else value
+
     def __repr_source__(self) -> str | None:
         resource = self.__config_resource__
         if resource is None:
@@ -1038,15 +1041,15 @@ class BaseSelector(
         return resource.__qualname__
 
     def __repr__(self) -> str:
-        repr_name =  self.__class__.__name__
+        repr_name = self.__repr_name__()
         repr_source = self.__repr_source__()
-        repr_str = self.serialize(self, mode='json')
+        repr_str = self.__repr_str__()
         if repr_source:
             return f'{repr_name}[{repr_source}]({repr_str})'
         return f'{repr_name}({repr_str})'
 
     def __str__(self) -> str:
-        return self.serialize(self, mode='json')
+        return self.__repr_str__(';')
 
 
 #  MARK: Identity Selector
@@ -1095,6 +1098,10 @@ class Id(BaseSelector[_T], Generic[_T]):
         result = await super().resolve_lenient(__session, options=options)
         assert result is None or not isinstance(result, Sequence)
         return result
+
+    def __repr_args__(self) -> ReprArgs:
+        value = self.get('id')
+        yield None, '?' if value is Deferred else value
 
     def __repr_source__(self) -> str | None:
         resource = self.__config_resource__
