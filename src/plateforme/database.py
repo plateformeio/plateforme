@@ -98,6 +98,9 @@ from .core.database.orm import (
 )
 from .core.database.routing import DatabaseRouter
 from .core.database.sessions import (
+    AnySession,
+    AnySessionBulk,
+    AnySessionFactory,
     AsyncSession,
     AsyncSessionFactory,
     Session,
@@ -106,6 +109,7 @@ from .core.database.sessions import (
     async_session_manager,
     session_factory,
     session_manager,
+    set_expire_on_commit,
 )
 from .core.database.types import (
     ARRAY,
@@ -240,6 +244,10 @@ __all__ = (
     'with_polymorphic',
     # Routing
     'DatabaseRouter',
+    # Sessions
+    'AnySession',
+    'AnySessionBulk',
+    'AnySessionFactory',
     # Sessions (async)
     'AsyncSession',
     'AsyncSessionFactory',
@@ -250,6 +258,8 @@ __all__ = (
     'SessionFactory',
     'session_factory',
     'session_manager',
+    # Sessions (utilities)
+    'set_expire_on_commit',
     # Types (concrete)
     'ARRAY',
     'BIGINT',

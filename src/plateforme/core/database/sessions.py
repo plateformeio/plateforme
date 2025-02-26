@@ -11,8 +11,9 @@ Plateforme framework using SQLAlchemy features.
 """
 
 import asyncio
+from collections.abc import AsyncGenerator, Generator, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any, AsyncGenerator, Callable, Generator, Literal, TypeVar
+from typing import Any, Callable, Literal, TypeVar, Union
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession as _AsyncSession,
@@ -35,6 +36,9 @@ from .orm import Mapper
 _T = TypeVar('_T', bound=object)
 
 __all__ = (
+    'AnySession',
+    'AnySessionBulk',
+    'AnySessionFactory',
     # Session (async)
     'AsyncSession',
     'AsyncSessionBulk',
@@ -47,7 +51,21 @@ __all__ = (
     'SessionFactory',
     'session_factory',
     'session_manager',
+    # Utilities
+    'set_expire_on_commit',
 )
+
+
+AnySession = Union['AsyncSession', 'Session']
+"""A type alias for a session that can be either async or sync."""
+
+
+AnySessionBulk = Union['AsyncSessionBulk', 'SessionBulk']
+"""A type alias for a session bulk that can be either async or sync."""
+
+
+AnySessionFactory = Union['AsyncSessionFactory', 'SessionFactory']
+"""A type alias for a session factory that can be either async or sync."""
 
 
 AsyncSessionFactory = _async_sessionmaker['AsyncSession'] \
@@ -129,6 +147,20 @@ class AsyncSession(_AsyncSession):
             yield bulk
         finally:
             SESSION_BULK_CONTEXT.reset(token)
+
+    async def commit(self, *, expire: bool | None = None) -> None:
+        """Flush pending changes and commit the current transaction.
+
+        Args:
+            expire: Whether to expire all instances after the commit, so that
+                all attribute/object access subsequent to a completed
+                transaction will load from the most recent database state.
+                Defaults to ``None``.
+        """
+        if expire is None:
+            return await super().commit()
+        with set_expire_on_commit(expire, session=self):
+            return await super().commit()
 
 
 class AsyncSessionBulk(Bulk[AsyncSession]):
@@ -302,6 +334,20 @@ class Session(_Session):
         finally:
             SESSION_BULK_CONTEXT.reset(token)
 
+    def commit(self, *, expire: bool | None = None) -> None:
+        """Flush pending changes and commit the current transaction.
+
+        Args:
+            expire: Whether to expire all instances after the commit, so that
+                all attribute/object access subsequent to a completed
+                transaction will load from the most recent database state.
+                Defaults to ``None``.
+        """
+        if expire is None:
+            return super().commit()
+        with set_expire_on_commit(expire, session=self):
+            return super().commit()
+
 
 class SessionBulk(Bulk[Session]):
     """A bulk operation manager for resources.
@@ -362,10 +408,13 @@ class SessionBulk(Bulk[Session]):
 
 def async_session_factory(
     bind: AsyncConnection | AsyncEngine | None = None,
+    *,
     routing: DatabaseManager | None = None,
     scoped: bool = False,
     scopefunc: Callable[[], Any] = asyncio.current_task,
-    *args: Any,
+    autoflush: bool = True,
+    expire_on_commit: bool = True,
+    info: dict[Any, Any] | None = None,
     **kwargs: Any,
 ) -> AsyncSessionFactory:
     """Create an async session factory for `Session` objects.
@@ -382,6 +431,11 @@ def async_session_factory(
             Defaults to ``False``.
         scopefunc: An optional callable that returns a hashable token that
             identifies the current scope. Defaults to `asyncio.current_task`.
+        autoflush: Whether to enable autoflush or not. Defaults to ``True``.
+        expire_on_commit: Whether to expire all instances after the commit.
+            Defaults to ``True``.
+        info: An optional dictionary of arbitrary data to be associated with
+            this async session. Defaults to ``None``.
 
     Returns:
         An `AsyncSessionFactory` instance for creating `AsyncSession` objects.
@@ -392,9 +446,11 @@ def async_session_factory(
     # Build session factory
     factory = _async_sessionmaker(
         bind,
-        *args,
         class_=AsyncSession,
         routing=routing,
+        autoflush=autoflush,
+        expire_on_commit=expire_on_commit,
+        info=info,
         **kwargs,
     )
     # Wrap the factory in a scoped async session manager if requested. The
@@ -405,9 +461,12 @@ def async_session_factory(
 
 def session_factory(
     bind: Connection | Engine | None = None,
+    *,
     routing: DatabaseManager | None = None,
     scoped: bool = False,
-    *args: Any,
+    autoflush: bool = True,
+    expire_on_commit: bool = True,
+    info: dict[Any, Any] | None = None,
     **kwargs: Any,
 ) -> SessionFactory:
     """Create a sync session factory for `Session` objects.
@@ -422,6 +481,11 @@ def session_factory(
         scoped: Whether to use a scoped session or not. The scoped session
             factory ensures that the session is thread-safe.
             Defaults to ``False``.
+        autoflush: Whether to enable autoflush or not. Defaults to ``True``.
+        expire_on_commit: Whether to expire all instances after the commit.
+            Defaults to ``True``.
+        info: An optional dictionary of arbitrary data to be associated with
+            this session. Defaults to ``None``.
 
     Returns:
         A `SessionFactory` instance for creating `Session` objects.
@@ -433,9 +497,11 @@ def session_factory(
     # Build session factory
     factory = _sessionmaker(
         bind,
-        *args,
         class_=Session,
         routing=routing,
+        autoflush=autoflush,
+        expire_on_commit=expire_on_commit,
+        info=info,
         **kwargs,
     )
     # Wrap the factory in a scoped session manager if requested. The scoped
@@ -449,9 +515,9 @@ def session_factory(
 async def async_session_manager(
     *,
     using: AsyncSessionFactory | None = None,
-    auto_commit: bool = False,
     new: bool = False,
     on_missing: Literal['create', 'raise'] = 'create',
+    commit: Literal['auto', 'expire', 'preserve'] | None = None,
 ) -> AsyncGenerator[AsyncSession, None]:
     """An async session context manager for `AsyncSession` objects.
 
@@ -462,8 +528,6 @@ async def async_session_manager(
     Args:
         using: An optional `AsyncSessionFactory` instance to use instead of
             the application context factory. Defaults to ``None``.
-        auto_commit: Whether to automatically commit on success or rollback on
-            failure after the operation completes. Defaults to ``False``.
         new: Whether to create a new session or not. If set to ``True``, a new
             session is created. If set to ``False``, the current session is
             used if available, otherwise it follows the `on_missing` behavior.
@@ -471,6 +535,15 @@ async def async_session_manager(
         on_missing: The behavior to follow when no current session is
             available, either to create a new session or raise an error.
             Defaults to ``'create'``.
+        commit: The commit behavior to follow after the operation completes.
+            When set to ``None``, no commit action is performed, and the
+            session must be committed or rolled back manually. Otherwise, it
+            can be set to automatically commit on success or rollback on
+            failure with the following options:
+            - ``'auto'``: Automatically commit with default expire behavior.
+            - ``'expire'``: Expire all instances after the commit.
+            - ``'preserve'``: Preserve all instances after the commit.
+            Defaults to ``None``.
 
     Returns:
         An `AsyncSession` instance.
@@ -520,14 +593,18 @@ async def async_session_manager(
     try:
         yield session
     except Exception as error:
-        if auto_commit:
+        if commit is not None:
             await session.rollback()
         raise DatabaseError(
             "An error occurred while executing a database operation."
         ) from error
     else:
-        if auto_commit:
+        if commit == 'auto':
             await session.commit()
+        elif commit == 'expire':
+            await session.commit(expire=True)
+        elif commit == 'preserve':
+            await session.commit(expire=False)
     finally:
         SESSION_CONTEXT.reset(token)
         if isinstance(factory, _async_scoped_session):
@@ -540,9 +617,9 @@ async def async_session_manager(
 def session_manager(
     *,
     using: SessionFactory | None = None,
-    auto_commit: bool = False,
     new: bool = False,
     on_missing: Literal['create', 'raise'] = 'create',
+    commit: Literal['auto', 'expire', 'preserve'] | None = None,
 ) -> Generator[Session, None, None]:
     """A sync session context manager for `Session` objects.
 
@@ -553,8 +630,6 @@ def session_manager(
     Args:
         using: An optional `SessionFactory` instance to use instead of the
             application context factory. Defaults to ``None``.
-        auto_commit: Whether to automatically commit on success or rollback on
-            failure after the operation completes. Defaults to ``False``.
         new: Whether to create a new session or not. If set to ``True``, a new
             session is created. If set to ``False``, the current session is
             used if available, otherwise it follows the `on_missing` behavior.
@@ -562,6 +637,15 @@ def session_manager(
         on_missing: The behavior to follow when no current session is
             available, either to create a new session or raise an error.
             Defaults to ``'create'``.
+        commit: The commit behavior to follow after the operation completes.
+            When set to ``None``, no commit action is performed, and the
+            session must be committed or rolled back manually. Otherwise, it
+            can be set to automatically commit on success or rollback on
+            failure with the following options:
+            - ``'auto'``: Automatically commit with default expire behavior.
+            - ``'expire'``: Expire all instances after the commit.
+            - ``'preserve'``: Preserve all instances after the commit.
+            Defaults to ``None``.
 
     Returns:
         A `Session` instance.
@@ -611,17 +695,49 @@ def session_manager(
     try:
         yield session
     except Exception as error:
-        if auto_commit:
+        if commit is not None:
             session.rollback()
         raise DatabaseError(
             "An error occurred while executing a database operation."
         ) from error
     else:
-        if auto_commit:
+        if commit == 'auto':
             session.commit()
+        elif commit == 'expire':
+            session.commit(expire=True)
+        elif commit == 'preserve':
+            session.commit(expire=False)
     finally:
         SESSION_CONTEXT.reset(token)
         if isinstance(factory, _scoped_session):
             factory.remove()
         else:
             session.close()
+
+
+# MARK: Utilities
+
+@contextmanager
+def set_expire_on_commit(
+    value: bool, *, session: AnySession | None = None
+) -> Iterator[None]:
+    """Temporarily set expire_on_commit to a specific value."""
+    # Resolve sync session
+    if session is None:
+        session = SESSION_CONTEXT.get()
+    if session is None:
+        raise ValueError(
+            "No session available in the current context. A valid session "
+            "instance must be provided."
+        )
+    if hasattr(session, 'sync_session'):
+        session = getattr(session, 'sync_session')
+
+    # Handle expire on commit
+    assert isinstance(session, _Session)
+    session_expire_on_commit = session.expire_on_commit
+    session.expire_on_commit = value
+    try:
+        yield
+    finally:
+        session.expire_on_commit = session_expire_on_commit

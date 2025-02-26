@@ -509,7 +509,7 @@ class ResourceConfig(ModelConfig):
         self, name: str | None = None
     ) -> BaseServiceConfigDict:
         """Get the service configuration overrides for the given name."""
-        default = {}
+        default: BaseServiceConfigDict = {}
         # Handle direct configuration
         if self.endpoints is None:
             return default
@@ -2987,9 +2987,9 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
                 # Skip if method should not be included
                 owner = getattr(method, '__config_owner__', None)
                 if isinstance(owner, BaseService):
-                    overrides = cls.resource_config \
+                    service_overrides = cls.resource_config \
                         .get_service_overrides(owner.service_config.name)
-                    if not validate_service_method(method, overrides):
+                    if not validate_service_method(method, service_overrides):
                         continue
                 # Create resource endpoint
                 if endpoint := _create_resource_endpoint(
@@ -3755,8 +3755,12 @@ class BaseResource(
         return self.resource_model.model_fields_set
 
     async def resource_add(
-        self, *, session: AsyncSession | None = None
-    ) -> None:
+        self,
+        *,
+        session: AsyncSession | None = None,
+        commit: bool = False,
+        merge: bool = False,
+    ) -> Self:
         """Add the resource instance to the database.
 
         It places an object into the current `AsyncSession`.
@@ -3777,17 +3781,34 @@ class BaseResource(
             session: The session to use for the operation. If not provided, the
                 session in the current context is used.
                 Defaults to ``None``.
+            commit: Whether to commit the transaction after adding the resource
+                instance to the database. If set to ``True``, the transaction
+                is automatically committed, otherwise the transaction is not
+                committed and must be manually committed later.
+                Defaults to ``False``.
+            merge: Whether to merge the resource instance with the database
+                session. If set to ``True``, the resource instance is merged
+                with the session before adding it to the database.
+                Defaults to ``False``.
 
         Raises:
             PlateformeError: If the resource instance could not be added to the
                 database.
         """
+        # Helper to add the resource instance to the database
+        async def execute(obj: Self, _session: AsyncSession) -> Self:
+            if merge:
+                obj = await _session.merge(self)
+            _session.add(obj)
+            if commit:
+                await _session.commit(expire=False)
+            return obj
+
         try:
             if session:
-                session.add(self)
-                return
+                return await execute(self, session)
             async with async_session_manager(on_missing='raise') as session:
-                session.add(self)
+                return await execute(self, session)
         except Exception as error:
             raise PlateformeError(
                 f"Failed to add resource {self!r} to the database.",
@@ -3864,7 +3885,11 @@ class BaseResource(
             return cls(model)
 
     async def resource_delete(
-        self, *, session: AsyncSession | None = None,
+        self,
+        *,
+        session: AsyncSession | None = None,
+        commit: bool = False,
+        merge: bool = False,
     ) -> None:
         """Delete the resource instance from the database.
 
@@ -3885,17 +3910,33 @@ class BaseResource(
             session: The session to use for the operation. If not provided, the
                 session in the current context is used.
                 Defaults to ``None``.
+            commit: Whether to commit the transaction after adding the resource
+                instance to the database. If set to ``True``, the transaction
+                is automatically committed, otherwise the transaction is not
+                committed and must be manually committed later.
+                Defaults to ``False``.
+            merge: Whether to merge the resource instance with the database
+                session. If set to ``True``, the resource instance is merged
+                with the session before deleting it from the database.
+                Defaults to ``False``.
 
         Raises:
             PlateformeError: If the resource instance could not be deleted from
                 the database.
         """
+        # Helper to delete the resource instance from the database
+        async def execute(obj: Self, _session: AsyncSession) -> None:
+            if merge:
+                obj = await _session.merge(obj)
+            await _session.delete(obj)
+            if commit:
+                await _session.commit(expire=True)
+
         try:
             if session:
-                await session.delete(self)
-                return
+                return await execute(self, session)
             async with async_session_manager(on_missing='raise') as session:
-                await session.delete(self)
+                return await execute(self, session)
         except Exception as error:
             raise PlateformeError(
                 f"Failed to delete resource {self!r} from the database.",

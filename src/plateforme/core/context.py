@@ -13,12 +13,7 @@ import typing
 from contextvars import ContextVar
 
 if typing.TYPE_CHECKING:
-    from .database.sessions import (
-        AsyncSession,
-        AsyncSessionBulk,
-        Session,
-        SessionBulk,
-    )
+    from .database.sessions import AnySession, AnySessionBulk
     from .main import Plateforme
     from .schema.core import RecursionState, ValidationMode
 
@@ -53,12 +48,12 @@ RECURSION_CONTEXT: ContextVar['RecursionState | None'] = \
 """The context variable for the recursive guard when validating."""
 
 
-SESSION_BULK_CONTEXT: ContextVar['AsyncSessionBulk | SessionBulk | None'] \
+SESSION_BULK_CONTEXT: ContextVar['AnySessionBulk | None'] \
     = ContextVar('current_session_bulk', default=None)
 """The context variable for the current async or sync session bulk."""
 
 
-SESSION_CONTEXT: ContextVar['AsyncSession | Session | None'] \
+SESSION_CONTEXT: ContextVar['AnySession | None'] \
     = ContextVar('current_session', default=None)
 """The context variable for the current async or sync session."""
 

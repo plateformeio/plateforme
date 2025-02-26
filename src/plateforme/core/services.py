@@ -792,9 +792,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
         if dry_run:
             await session.rollback()
         else:
-            if return_result:
-                session.sync_session.expire_on_commit = False
-            await session.commit()
+            await session.commit(expire=not return_result)
 
         # Handle return result
         if not return_result:
@@ -1113,9 +1111,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
         if dry_run:
             await session.rollback()
         else:
-            if return_result:
-                session.sync_session.expire_on_commit = False
-            await session.commit()
+            await session.commit(expire=not return_result)
 
         # Handle return result
         if not return_result:
@@ -1329,9 +1325,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
         if dry_run:
             await session.rollback()
         else:
-            if return_result:
-                session.sync_session.expire_on_commit = False
-            await session.commit()
+            await session.commit(expire=not return_result)
 
         # Handle return result
         if not return_result:
@@ -1463,9 +1457,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
         if dry_run:
             await session.rollback()
         else:
-            if return_result:
-                session.sync_session.expire_on_commit = False
-            await session.commit()
+            await session.commit(expire=not return_result)
 
         # Handle return result
         if not return_result:
@@ -1545,10 +1537,8 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
         if dry_run:
             await session.rollback()
         else:
-            if return_result:
-                session.sync_session.expire_on_commit = False
             await session.delete(result)
-            await session.commit()
+            await session.commit(expire=not return_result)
 
         # Handle return result
         if not return_result:
@@ -1732,9 +1722,7 @@ class CRUDService(BaseServiceWithSpec[CRUDSpec]):
         if dry_run:
             await session.rollback()
         else:
-            if return_result:
-                session.sync_session.expire_on_commit = False
-            await session.commit()
+            await session.commit(expire=not return_result)
 
         # Handle return result
         if not return_result:
