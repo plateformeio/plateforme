@@ -2908,14 +2908,19 @@ def collect_model_fields(
             check_value = predicate
 
         # Resolve attribute value
-        if callable(attr):
-            attr_value = attr(*check_args, **check_kwargs)
-        else:
+        if not callable(attr):
+            if check_args or check_kwargs:
+                raise ValueError(
+                    f"Field attribute {key!r} is not callable, but arguments "
+                    f"were provided. Got: {predicate}."
+                )
             attr_value = attr
+        else:
+            attr_value = attr(*check_args, **check_kwargs)
 
         # Check attribute value against the predicate
         if callable(check_value):
-            check_value = check_value(attr_value)
+            return bool(check_value(attr_value))
         return bool(
             attr_value in check_value
             if isinstance(check_value, (list, set, tuple))
