@@ -2907,12 +2907,15 @@ def collect_model_fields(
             check_kwargs = {}
             check_value = predicate
 
-        # Check attribute value against the predicate
+        # Resolve attribute value
         if callable(attr):
             attr_value = attr(*check_args, **check_kwargs)
         else:
             attr_value = attr
 
+        # Check attribute value against the predicate
+        if callable(check_value):
+            check_value = check_value(attr_value)
         return bool(
             attr_value in check_value
             if isinstance(check_value, (list, set, tuple))

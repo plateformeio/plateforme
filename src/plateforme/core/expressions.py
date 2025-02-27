@@ -83,10 +83,10 @@ IncExObj = Union[IncExSet[IncExKey], IncExDict[IncExKey]]
 
 
 IncExPredicate = Union[
-    Any,
-    Tuple[Sequence[Any], Any],
-    Tuple[Mapping[str, Any], Any],
-    Tuple[Sequence[Any], Mapping[str, Any], Any],
+    Any | Callable[[Any], Any],
+    Tuple[Sequence[Any], Any] | Callable[[Any], Any],
+    Tuple[Mapping[str, Any], Any | Callable[[Any], Any]],
+    Tuple[Sequence[Any], Mapping[str, Any], Any | Callable[[Any], Any]],
 ]
 """A type alias for inclusive and exclusive predicate values.
 
@@ -94,22 +94,22 @@ This type represents different ways to specify matching criteria for values. It
 supports both direct value matching and callable predicates with various
 argument patterns:
 
-1.  `Any`
+1.  `Any | Callable[[Any], Any]`
     Direct predicate where it checks whether the target matches the value, or
     is contained within the collection if the provided value is a list, set, or
     tuple, e.g.: ``42`` or ``[1, 2, 3]``.
 
-2.  `Tuple[Sequence[Any], Any]`
+2.  `Tuple[Sequence[Any], Any | Callable[[Any], Any]]`
     Callable predicate with positional arguments where it calls the function
     with the given positional arguments and matches against the value(s), e.g.:
     ``(['foo', 'bar'], 42)`` or ``(['foo', 'bar'], [1, 2, 3])``.
 
-3.  `Tuple[Mapping[str, Any], Any]`
+3.  `Tuple[Mapping[str, Any], Any | Callable[[Any], Any]]`
     Callable predicate with keyword arguments where it calls the function with
     the given keyword arguments and matches against the value(s), e.g.:
     ``({'min': 0, 'max': 100}, 42)`` or ``({'foo': 'bar'}, [1, 2, 3])``.
 
-4.  `Tuple[Sequence[Any], Mapping[str, Any], Any]`
+4.  `Tuple[Sequence[Any], Mapping[str, Any], Any | Callable[[Any], Any]]`
     Callable predicate with both positional and keyword arguments where it
     calls the function with both positional and keyword arguments and matches
     against the value(s), e.g.: ``(['foo', 'bar'], {'min': 0}, 42)``.
@@ -118,6 +118,9 @@ Note:
     For all forms, the last value can be either a single value or a collection
     (`list`, `set`, `tuple`) of values. The predicate matches if the result
     equals the single value or is contained within the collection.
+
+    If the last value is a callable, the predicate will match the result of the
+    function call.
 """
 
 
