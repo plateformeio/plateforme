@@ -2814,7 +2814,10 @@ def collect_class_fields(
             )
         field_definitions = dict(sorted(
             field_definitions.items(),
-            key=lambda item: field_sort.index(item[0]),
+            key=lambda item: (
+                field_sort.index(item[0])
+                if item[0] in field_sort else len(field_sort) + 1
+            ),
         ))
 
     return field_definitions
