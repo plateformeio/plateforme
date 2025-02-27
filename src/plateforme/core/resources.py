@@ -148,7 +148,7 @@ from .schema.models import (
     ModelType,
     NoInitField,
     RootModel,
-    collect_fields,
+    collect_model_fields,
     collect_models,
     create_discriminated_model,
     create_model,
@@ -2321,6 +2321,7 @@ def _register_base_schemas(cls: 'ResourceMeta', /) -> None:
     # Collect schema models
     models = collect_models(
         cls,
+        __owner__=cls,
         __cls_kwargs__={
             'defer_build': not cls.__pydantic_complete__
         },
@@ -2366,7 +2367,7 @@ def _create_schema_base_model(
     __module__: str | None = None,
     __validators__: dict[str, ClassMethodType] | None = None,
     __cls_kwargs__: dict[str, Any] | None = None,
-    __collect__: tuple[FieldLookup, ...] | None = None,
+    __collect__: Sequence[FieldLookup] | FieldLookup | None = None,
     **field_definitions: FieldDefinition,
 ) -> None:
     """Create a new resource schema base model.
@@ -2388,7 +2389,7 @@ def _create_schema_base_model(
         __cls_kwargs__: A dictionary of keyword arguments for class creation,
             such as ``metaclass``.
         __collect__: The field lookup filters to collect fields from the
-            resource schema model. Defaults to ``None``.
+            resource schema model.
         **field_definitions: Attributes of the new model. They should be passed
             in the format: ``<name>=(<type>, <default value>)`` or
             ``<name>=(<type>, <FieldInfo>)``.
@@ -2406,11 +2407,13 @@ def _create_schema_base_model(
         if not isinstance(__base__, tuple):
             __base__ = (__base__,)
         for base in __base__:
-            base_field_definitions.update(collect_fields(base))
+            base_field_definitions.update(collect_model_fields(base))
 
     # Collect field definitions
     if __collect__:
         collect_field_definitions = {}
+        if not isinstance(__collect__, Sequence):
+            __collect__ = (__collect__,)
         for lookup in __collect__:
             collect_field_definitions.update(cls._collect_fields(**lookup))
     else:
@@ -2445,6 +2448,7 @@ def _create_schema_base_model(
     # Create model
     model = create_model(
         __model_name,
+        __owner__=cls,
         __config__=None,
         __doc__=__doc__,
         __base__=base_model,
@@ -2899,7 +2903,7 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
                     cls.resource_schemas.pop(name)
 
     def _collect_fields(
-        cls, **lookup: Unpack[FieldLookup]
+        cls, **kwargs: Unpack[FieldLookup]
     ) -> dict[str, tuple[type[Any], ModelFieldInfo]]:
         """Collect the resource model field definitions.
 
@@ -2909,22 +2913,37 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
         dictionary.
 
         Args:
-            include: The filters to include specific fields based on the field
-                attributes as a dictionary with the field attribute names as
-                keys and the values to include as values. Defaults to ``None``.
-            exclude: The filters to exclude specific fields based on the field
-                attributes as a dictionary with the field attribute names as
-                keys and the values to exclude as values. Defaults to ``None``.
-            optional: A flag indicating whether to mark the field annotations
-                as optional. Defaults to ``None``.
-            update: The dictionary of field attributes to update.
+            computed: Whether to include computed fields in the lookup
+                configuration. When set to ``True``, field definitions for
+                computed fields are included in the lookup configuration.
                 Defaults to ``None``.
+            include: The filters for including specific fields as a dictionary
+                with the field attribute names as keys and the values to match.
+                Specified keys can use the ``.`` notation to access nested
+                attributes. Additionally, the lookup attributes can be
+                callables without arguments. Defaults to ``None``.
+            exclude: The filters for excluding specific fields as a dictionary
+                with the field attribute names as keys and the values to not
+                match. Specified keys can use the ``.`` notation to access
+                nested attributes. Additionally, the lookup attributes can be
+                callable without arguments. Defaults to ``None``.
+            partial: Whether to mark the field annotations as optional.
+                Defaults to ``None``.
+            default: The default to apply and set within the field information.
+                Defaults to ``None``.
+            update: The update to apply and set within the field information.
+                Defaults to ``None``.
+            override: The field lookup configuration to override the current
+                configuration. This can be used to narrow down the field lookup
+                configuration to specific fields. Multiple levels of nested
+                configurations can be provided and will be resolved
+                recursively. Defaults to ``None``.
 
         Returns:
             A dictionary of field names with the corresponding field
             annotations and field information.
         """
-        return collect_fields(getattr(cls, 'Model'), **lookup)
+        return collect_model_fields(getattr(cls, 'Model'), **kwargs)
 
     def _create_path(cls, *path: str) -> ResourcePath:
         """Create a new resource path from the resource.
@@ -3054,6 +3073,7 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
                     Union[cls, *resource_subclasses]  # type: ignore
                 discriminated = create_discriminated_model(
                     'Discriminated' + cls.__name__,
+                    __owner__=cls,
                     discriminator='type',
                     root=(discriminated_union, ...),
                 )
@@ -3149,7 +3169,7 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
         __module__: str | None = None,
         __validators__: dict[str, ClassMethodType] | None = None,
         __cls_kwargs__: dict[str, Any] | None = None,
-        __collect__: tuple[FieldLookup, ...] | None = None,
+        __collect__: Sequence[FieldLookup] | FieldLookup | None = None,
         **field_definitions: FieldDefinition,
     ) -> None:
         """Register a resource schema within the resource class.
@@ -3162,20 +3182,20 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
         Args:
             __schema_name: The name of the new resource schema model.
             __schema_fallback: The fallback schema aliases to use when
-                resolving the resource schema model. Defaults to ``None``.
+                resolving the resource schema model.
             __force__: Whether to force the registration of the resource schema
                 model even if it already exists and the original owner is not
-                the current resource class. Defaults to ``False``.
+                the current resource class.
             __owner__: The owner object or identifier to use as the registrant
                 of the new resource schema model. If an object is provided,
                 the object's identifier is used. If an integer is provided, the
                 integer is used. Otherwise, the caller stack context is used to
-                determine the owner when available. Defaults to ``None``.
+                determine the owner when available.
             __stub__: Whether to mark the resource schema model as a stub model
                 that can accept merging with other schema models from different
                 sources. When set to ``None``, the value is inferred from the
                 base models if provided, i.e. if all models are stub models,
-                otherwise resolves to ``True``. Defaults to ``None``.
+                otherwise resolves to ``True``.
             __doc__: The docstring of the new model.
             __base__: The base class or classes for the new model.
             __module__: The name of the module that the model belongs to.
@@ -3184,7 +3204,7 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
             __cls_kwargs__: A dictionary of keyword arguments for class
                 creation, such as ``metaclass``.
             __collect__: The field lookup filters to collect fields from the
-                resource schema model. Defaults to ``None``.
+                resource schema model.
             **field_definitions: Attributes of the new model. They should be
                 passed in the format: ``<name>=(<type>, <default value>)`` or
                 ``<name>=(<type>, <FieldInfo>)``.
@@ -3510,7 +3530,6 @@ class BaseResource(
             type_: str | None
             ...
 
-    if typing.TYPE_CHECKING:
         def __init_subclass__(
             cls, **kwargs: Unpack[ResourceConfigDict]
         ) -> None:

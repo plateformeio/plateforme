@@ -85,7 +85,7 @@ class SpecFacade(Protocol):
         __module__: str | None = None,
         __validators__: dict[str, ClassMethodType] | None = None,
         __cls_kwargs__: dict[str, Any] | None = None,
-        __collect__: tuple[FieldLookup, ...] | None = None,
+        __collect__: Sequence[FieldLookup] | FieldLookup | None = None,
         **field_definitions: FieldDefinition,
     ) -> None:
         """Register a schema within the facade.
@@ -98,20 +98,20 @@ class SpecFacade(Protocol):
         Args:
             __schema_name: The name of the new resource schema model.
             __schema_fallback: The fallback schema aliases to use when
-                resolving the resource schema model. Defaults to ``None``.
+                resolving the resource schema model.
             __force__: Whether to force the registration of the resource schema
                 model even if it already exists and the original owner is not
-                the current facade. Defaults to ``False``.
+                the current facade.
             __owner__: The owner object or identifier to use as the registrant
                 of the new resource schema model. If an object is provided,
                 the object's identifier is used. If an integer is provided, the
                 integer is used. Otherwise, the caller stack context is used to
-                determine the owner when available. Defaults to ``None``.
+                determine the owner when available.
             __stub__: Whether to mark the resource schema model as a stub model
                 that can accept merging with other schema models from different
                 sources. When set to ``None``, the value is inferred from the
                 base models if provided, i.e. if all models are stub models,
-                otherwise resolves to ``True``. Defaults to ``None``.
+                otherwise resolves to ``True``.
             __doc__: The docstring of the new model.
             __base__: The base class or classes for the new model.
             __module__: The name of the module that the model belongs to.
@@ -120,7 +120,7 @@ class SpecFacade(Protocol):
             __cls_kwargs__: A dictionary of keyword arguments for class
                 creation, such as ``metaclass``.
             __collect__: The field lookup filters to collect fields from the
-                resource schema model. Defaults to ``None``.
+                resource schema model.
             **field_definitions: Attributes of the new model. They should be
                 passed in the format: ``<name>=(<type>, <default value>)`` or
                 ``<name>=(<type>, <FieldInfo>)``.
@@ -162,7 +162,7 @@ class BaseSpec(Protocol):
             specification is bound to a service facade when the
             `auto_apply_spec` configuration is enabled.
         """
-        models = collect_models(cls)
+        models = collect_models(cls, __owner__=cls)
         for model in models:
             facade._register_schema(model.__qualname__, __base__=model)
 

@@ -161,7 +161,8 @@ __all__ = (
     'RootModel',
     'RootModelMeta',
     'RootModelType',
-    'collect_fields',
+    'collect_class_fields',
+    'collect_model_fields',
     'collect_models',
     'create_discriminated_model',
     'create_model',
@@ -657,6 +658,9 @@ class ModelMeta(ConfigurableMeta, _ModelMeta):
         model_adapter: TypeAdapterList['BaseModel']
         model_config: ModelConfig
         model_fields: dict[str, ModelFieldInfo]  # type: ignore
+
+    # The model owner registrant
+    __registrant__: int | None = None
 
     def __new__(
         mcls,
@@ -1761,6 +1765,7 @@ setattr(BaseModel.__init__, '__pydantic_base_init__', True)
 def create_model(
     __model_name: str,
     *,
+    __owner__: object | int | None = None,
     __config__: ModelConfig | None = None,
     __doc__: str | None = None,
     __base__: None = None,
@@ -1775,6 +1780,7 @@ def create_model(
 def create_model(
     __model_name: str,
     *,
+    __owner__: object | int | None = None,
     __config__: ModelConfig | None = None,
     __doc__: str | None = None,
     __base__: type[Model] | tuple[type[Model], ...],
@@ -1788,6 +1794,7 @@ def create_model(
 def create_model(
     __model_name: str,
     *,
+    __owner__: object | int | None = None,
     __config__: ModelConfig | None = None,
     __doc__: str | None = None,
     __base__: type[Model] | tuple[type[Model], ...] | None = None,
@@ -1802,6 +1809,9 @@ def create_model(
 
     Args:
         __model_name: The name of the newly created model.
+        __owner__: The owner object or identifier to use as the registrant of
+            the new model. If an object is provided, the object's identifier
+            is used. If an integer is provided, the integer is used.
         __config__: The configuration of the new model.
         __doc__: The docstring of the new model.
         __base__: The base class or classes for the new model.
@@ -1820,11 +1830,21 @@ def create_model(
     Raises:
         ValueError: If `__base__` and `__config__` are both passed.
     """
+    # Resolve model registrant
+    model_registrant =  (
+        id(__owner__)
+        if __owner__ and not isinstance(__owner__, int)
+        else __owner__
+    )
+
     # Create factory model class and update configuration
     if __base__ is None:
         model_config = __config__ or ModelConfig()
+
         class FactoryModel(BaseModel):
             __config__ = model_config
+            __registrant__ = model_registrant
+
         __config__ = None
         __base__ = typing.cast(type[Model], FactoryModel)
 
@@ -1853,6 +1873,7 @@ def create_model(
     )
 
     setattr(model, '__qualname__', model_qualname)
+    setattr(model, '__registrant__', model_registrant)
 
     return model
 
@@ -2083,6 +2104,7 @@ setattr(RootModel.__init__, '__pydantic_base_init__', True)
 def create_root_model(
     __model_name: str,
     *,
+    __owner__: object | int | None = None,
     __config__: ModelConfig | None = None,
     __doc__: str | None = None,
     __module__: str | None = None,
@@ -2096,6 +2118,9 @@ def create_root_model(
 
     Args:
         __model_name: The name of the newly created model.
+        __owner__: The owner object or identifier to use as the registrant of
+            the new model. If an object is provided, the object's identifier
+            is used. If an integer is provided, the integer is used.
         __config__: The configuration of the new model.
         __doc__: The docstring of the new model.
         __module__: The name of the module that the model belongs to.
@@ -2113,10 +2138,20 @@ def create_root_model(
     Raises:
         ValueError: If `__base__` and `__config__` are both passed.
     """
+    # Resolve model registrant
+    model_registrant =  (
+        id(__owner__)
+        if __owner__ and not isinstance(__owner__, int)
+        else __owner__
+    )
+
     # Create the factory model class and update configuration
     model_config = __config__ or ModelConfig()
+
     class FactoryModel(RootModel[_TRoot]):
         __config__ = model_config
+        __registrant__ = model_registrant
+
     __base__ = typing.cast(type[RootModel[_TRoot]], FactoryModel)
 
     # Create model using Pydantic factory with updated configuration
@@ -2145,7 +2180,6 @@ if typing.TYPE_CHECKING:
     )
     class DiscriminatedModelMeta(RootModelMeta):
         """A metaclass for discriminated model classes."""
-        __registrant__: int | None
 
         def collect_typevar_values(
             cls, bases: tuple[type, ...], namespace: dict[str, Any], /,
@@ -2239,8 +2273,6 @@ else:
         if typing.TYPE_CHECKING:
             model_fields: dict[str, ModelFieldInfo]
             model_rebuild: Callable[..., None]
-
-        __registrant__ = None
 
         def __new__(
             mcls,
@@ -2625,7 +2657,6 @@ def create_discriminated_model(
         __owner__: The owner object or identifier to use as the registrant of
             the new model. If an object is provided, the object's identifier
             is used. If an integer is provided, the integer is used.
-            Defaults to ``None``.
         __config__: The configuration of the new model.
         __doc__: The docstring of the new model.
         __module__: The name of the module that the model belongs to.
@@ -2645,18 +2676,22 @@ def create_discriminated_model(
     Raises:
         ValueError: If `__base__` and `__config__` are both passed.
     """
+    # Resolve model registrant
+    model_registrant =  (
+        id(__owner__)
+        if __owner__ and not isinstance(__owner__, int)
+        else __owner__
+    )
+
     # Create the factory model class and update configuration
     model_config = __config__ or ModelConfig()
+
     class FactoryModel(
         DiscriminatedModel[*tuple[_TBase, ...]],
         discriminator=discriminator,
     ):
         __config__ = model_config
-        __registrant__ = (
-            id(__owner__)
-            if __owner__ and not isinstance(__owner__, int)
-            else __owner__
-        )
+        __registrant__ = model_registrant
 
     __base__ = typing.cast(
         type[DiscriminatedModel[*tuple[_TBase, ...]]],
@@ -2678,8 +2713,116 @@ def create_discriminated_model(
 
 # MARK: Utilities
 
-def collect_fields(
-    __model: ModelType, **kwargs: Unpack[FieldLookup],
+def collect_class_fields(
+    __cls: type[Any],
+    __base_model: 'Any | ModelType | ResourceType | None' = None,
+) -> dict[str, FieldDefinition]:
+    """Collect the model field definitions from the provided class.
+
+    It collects the model fields based on the provided class and its
+    annotations. When a base model is provided, the specification class can
+    implement special attributes to dynamically include or exclude fields from
+    the base model:
+    - `__sort__`: A list of field names to sort the collected fields.
+    - `__collect__`: A single or a collection of field lookup configurations.
+    - `__include__`: A collection of field names to include.
+    - `__exclude__`: A collection of field names to exclude.
+
+    Args:
+        __cls: The class to collect the fields from.
+        __base_model: The base model to apply the field lookup configuration.
+            If provided, the field lookup configuration is applied to the base
+            model.
+
+    Returns:
+        A dictionary of field names with the corresponding field annotations
+        and field information.
+    """
+    field_definitions: dict[str, FieldDefinition] = {}
+    field_sort = getattr(__cls, '__sort__', None)
+
+    # Handle field lookup configuration
+    field_collect = getattr(__cls, '__collect__', None)
+    field_include = getattr(__cls, '__include__', None)
+    field_exclude = getattr(__cls, '__exclude__', None)
+    if is_model(__base_model) or is_resource(__base_model):
+        # Handle collect configuration
+        if field_collect is not None:
+            # Validate collect configuration
+            if field_include is not None or field_exclude is not None:
+                raise ValueError(
+                    f"Field lookup configuration cannot be used with include "
+                    f"or exclude filters. Got: {field_collect}."
+                )
+            if not isinstance(field_collect, Sequence):
+                field_collect = (field_collect,)
+            if not all(isinstance(lookup, dict) for lookup in field_collect):
+                raise TypeError(
+                    f"Field lookup configuration must be a single or "
+                    f"collection of dictionaries. Got: {field_collect}."
+                )
+            # Update field definitions
+            for lookup in field_collect:
+                field_definitions.update(
+                    **collect_model_fields(__base_model, **lookup)
+                )
+        # Handle include or exclude configuration
+        elif field_include is not None or field_exclude is not None:
+            # Validate include configuration
+            if field_include is not None:
+                if not isinstance(field_include, (list, set, tuple)):
+                    raise TypeError(
+                        f"Field include filter must be a collection of field "
+                        f"names. Got: {field_include}."
+                    )
+                if field_sort is None and not isinstance(field_include, set):
+                    field_sort = field_include
+                field_include = {'name': set(field_include)}
+            # Validate exclude configuration
+            if field_exclude is not None:
+                if not isinstance(field_exclude, (list, set, tuple)):
+                    raise TypeError(
+                        f"Field exclude filter must be a collection of field "
+                        f"names. Got: {field_exclude}."
+                    )
+                field_exclude = {'name': set(field_exclude)}
+            # Update field definitions
+            field_definitions.update(
+                **collect_model_fields(
+                    __base_model,
+                    include=field_include,
+                    exclude=field_exclude,
+                )
+            )
+
+    # Handle models annotations
+    for field_name, field_type in __cls.__annotations__.items():
+        if field_name.startswith('_'):
+            continue
+        field_value = getattr(__cls, field_name, ...)
+        if field_value is ... and field_name in field_definitions:
+            field_definition = field_definitions[field_name]
+            field_value = field_definition[1]
+        field_definitions[field_name] = (field_type, field_value)
+
+    # Sort field definitions
+    if field_sort is not None:
+        if not isinstance(field_sort, Sequence):
+            raise TypeError(
+                f"Field sort must be a sequence of field names. "
+                f"Got: {field_sort}."
+            )
+        field_definitions = dict(sorted(
+            field_definitions.items(),
+            key=lambda item: field_sort.index(item[0]),
+        ))
+
+    return field_definitions
+
+
+def collect_model_fields(
+    __model: 'ModelType | ResourceType',
+    **kwargs: Unpack[FieldLookup],
 ) -> dict[str, FieldDefinition]:
     """Collect the model field definitions from the provided model.
 
@@ -2692,29 +2835,31 @@ def collect_fields(
 
     Args:
         __model: The model class to collect the fields from.
-        **kwargs: The field lookup configuration to collect the fields.
-            - `computed`: Whether to include computed fields. When set to
-                ``True``, field definitions for computed fields are included.
-                Defaults to ``None``.
-            - `include`: The filters to include specific fields based on the
-                field attributes as a dictionary with the field attribute names
-                as keys and the predicates to include as values.
-                Defaults to ``None``.
-            - `exclude`: The filters to exclude specific fields based on the
-                field attributes as a dictionary with the field attribute names
-                as keys and the predicates to exclude as values.
-                Defaults to ``None``.
-            - `partial`: Whether to mark the field annotations as optional.
-                Defaults to ``None``.
-            - `default`: The default to apply and set within the field
-                information. Defaults to ``None``.
-            - `update`: The update to apply and set within the field
-                information. Defaults to ``None``.
-            - `override`: The field lookup configuration to override the
-                current configuration. This can be used to narrow down the
-                field lookup configuration to specific fields. Multiple levels
-                of nested configurations can be provided and will be resolved
-                recursively. Defaults to ``None``.
+        computed: Whether to include computed fields in the lookup
+            configuration. When set to ``True``, field definitions for computed
+            fields are included in the lookup configuration.
+            Defaults to ``None``.
+        include: The filters for including specific fields as a dictionary with
+            the field attribute names as keys and the values to match.
+            Specified keys can use the ``.`` notation to access nested
+            attributes. Additionally, the lookup attributes can be callables
+            without arguments. Defaults to ``None``.
+        exclude: The filters for excluding specific fields as a dictionary with
+            the field attribute names as keys and the values to not match.
+            Specified keys can use the ``.`` notation to access nested
+            attributes. Additionally, the lookup attributes can be callable
+            without arguments. Defaults to ``None``.
+        partial: Whether to mark the field annotations as optional.
+            Defaults to ``None``.
+        default: The default to apply and set within the field information.
+            Defaults to ``None``.
+        update: The update to apply and set within the field information.
+            Defaults to ``None``.
+        override: The field lookup configuration to override the current
+            configuration. This can be used to narrow down the field lookup
+            configuration to specific fields. Multiple levels of nested
+            configurations can be provided and will be resolved recursively.
+            Defaults to ``None``.
 
     Returns:
         A dictionary of field names with the corresponding field annotations
@@ -2726,8 +2871,8 @@ def collect_fields(
         __model = __model.get_root_base()
 
     model_fields: dict[str, ComputedFieldInfo | ModelFieldInfo] = {
-        **__model.model_fields,
-        **__model.model_computed_fields,
+        **__model.model_fields,  # type: ignore
+        **__model.model_computed_fields,  # type: ignore
     }
 
     # Helper function to check if a field should be included or excluded
@@ -2836,29 +2981,35 @@ def collect_fields(
 def collect_models(
     __obj: Any,
     *,
+    __owner__: object | int | None = None,
     __config__: ModelConfig | None = None,
     __base__: ModelType | tuple[ModelType, ...] | None = None,
     __module__: str | None = None,
+    __path__: str | None = None,
     __validators__: dict[str, ClassMethodType] | None = None,
     __cls_kwargs__: dict[str, Any] | None = None,
-    __namespace__: str | None = None,
 ) -> list[ModelType]:
     """Collect and build recursively all nested models in a given object.
 
     It recursively collect all nested classes in a given object and build the
-    associated models. The `__namespace__` argument is used recursively to
-    determine the root namespace under which the models are collected.
+    associated models. The `__path__` argument is used recursively to determine
+    the root fullname path under which the models are collected.
 
     Args:
         __obj: The object to inspect for nested classes.
+        __owner__: The owner object or identifier to use as the registrant of
+            the created models. If an object is provided, the object's
+            identifier is used. If an integer is provided, the integer is used.
+            This is also used as the parent base model for the nested models,
+            in place of the provided object when provided.
         __config__: The configuration of the new models.
         __base__: The base class or classes for the new models.
         __module__: The name of the module that the models belongs to.
             If ``None``, the value is retrieved from ``sys._getframe(1)``.
+        __path__: The fullname path under which the models are collected.
         __validators__: A dictionary of class methods that validate fields.
         __cls_kwargs__: A dictionary of keyword arguments for class creation,
             such as ``metaclass``.
-        __namespace__: The namespace of the object to collect models from.
 
     Returns:
         A dictionary with the generated `BaseModel` classes.
@@ -2866,16 +3017,18 @@ def collect_models(
     Raises:
         ValueError: If `__base__` and `__config__` are both passed.
     """
-    # Retrieve object namespace
-    obj_namespace = get_object_name(__obj, fullname=True) + '.'
+    # Resolve model owner
+    if __owner__ is None:
+        __owner__ = __obj
 
     # Validate root and object namespace
-    if __namespace__ is None:
-        __namespace__ = obj_namespace
-    if not obj_namespace.startswith(__namespace__):
+    obj_name = get_object_name(__obj, fullname=True) + '.'
+    if __path__ is None:
+        __path__ = obj_name
+    if not obj_name.startswith(__path__):
         raise ValueError(
-            f"Object namespace {obj_namespace!r} does not belong to the "
-            f"specified namespace {__namespace__!r}."
+            f"Object full name {obj_name!r} does not belong to the specified "
+            f"path {__path__!r}."
         )
 
     models: list[ModelType] = []
@@ -2893,78 +3046,18 @@ def collect_models(
 
         # Skip non-defined classes
         attr_name = get_object_name(attr, fullname=True)
-        if not attr_name.startswith(obj_namespace):
+        if not attr_name.startswith(obj_name):
             continue
 
-        # Build model
+        # Retrieve model
         if issubclass(attr, BaseModel):
             model = attr
-        elif not is_base_class(attr):
-            continue
-        else:
-            field_definitions: dict[str, FieldDefinition] = {}
-
-            # Handle nested models include and exclude filters
-            field_include = getattr(attr, '__include__', None)
-            field_exclude = getattr(attr, '__exclude__', None)
-            if field_include or field_exclude:
-                if not is_model(__obj) and not is_resource(__obj):
-                    raise TypeError(
-                        f"Field include and exclude filters can only be used "
-                        f"within nested model classes. Got: {__obj}."
-                    )
-                # Validate include filters
-                field_sort = None
-                if field_include is not None:
-                    if not isinstance(field_include, (list, set, tuple)):
-                        raise TypeError(
-                            f"Field include filter must be a collection of "
-                            f"field names. Got: {field_include}."
-                        )
-                    if not isinstance(field_include, set):
-                        field_sort = field_include
-                    field_include = set(field_include)
-                # Validate exclude filters
-                if field_exclude  is not None:
-                    if not isinstance(field_exclude, (list, set, tuple)):
-                        raise TypeError(
-                            f"Field exclude filter must be a collection of "
-                            f"field names. Got: {field_exclude}."
-                        )
-                    field_exclude = set(field_exclude)
-                # Collect base fields
-                base_field_definitions = collect_fields(
-                    __obj,  # type: ignore
-                    include={'name': field_include} if field_include else None,
-                    exclude={'name': field_exclude} if field_exclude else None,
-                )
-                # Sort and update base fields
-                if field_sort is not None:
-                    base_field_definitions = dict(sorted(
-                        base_field_definitions.items(),
-                        key=lambda item: field_sort.index(item[0])
-                    ))
-                field_definitions.update(base_field_definitions)
-
-            # Handle models annotations
-            for field_name, field_type in attr.__annotations__.items():
-                if field_name.startswith('_'):
-                    continue
-                field_value = ...
-                if hasattr(attr, field_name):
-                    field_value = getattr(attr, field_name)
-                if field_name in field_definitions:
-                    raise ValueError(
-                        f"Field {field_name!r} is already defined in the "
-                        f"model. A field included automatically by the model "
-                        f"definition cannot be redefined. Got: "
-                        f"{field_definitions[field_name][0]}."
-                    )
-                field_definitions[field_name] = (field_type, field_value)
-
-            model_name = attr_name[len(__namespace__):]
+        elif is_base_class(attr):
+            field_definitions = collect_class_fields(attr, __owner__)
+            model_name = attr_name[len(__path__):]
             model = create_model(  # type: ignore
                 model_name,
+                __owner__=__owner__,
                 __config__=__config__,
                 __doc__=getattr(attr, '__doc__', None),
                 __base__=__base__,  # type: ignore[arg-type]
@@ -2976,6 +3069,8 @@ def collect_models(
                 },
                 **field_definitions,
             )
+        else:
+            continue
 
         # Add model
         models.append(model)
@@ -2983,12 +3078,13 @@ def collect_models(
         # Add nested models
         nested_models = collect_models(
             attr,
+            __owner__=__owner__,
             __config__=__config__,
             __base__=__base__,
             __module__=__module__,
+            __path__=__path__,
             __validators__=__validators__,
             __cls_kwargs__=__cls_kwargs__,
-            __namespace__=__namespace__,
         )
         models.extend(nested_models)
 
