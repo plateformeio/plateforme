@@ -58,7 +58,7 @@ requires-python = ">=3.11"
 dependencies = [
     "aiosqlite==0.21.0",
     "alembic==1.14.1",
-    "fastapi==0.115.8",
+    "fastapi==0.115.10",
     "pydantic==2.10.6",
     "pydantic-core==2.27.2",
     "pydantic-settings==2.8.0",
