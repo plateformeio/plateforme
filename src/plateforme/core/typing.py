@@ -871,7 +871,7 @@ def get_cls_hierarchy(cls: type[Any]) -> dict[str, type[Any]]:
         TypeError: If any class in the hierarchy cannot be found in its
             expected location within the module.
 
-    Example:
+    Examples:
         >>> class Root:
         ...     class Nested:
         ...         class DeeplyNested:
@@ -1055,20 +1055,50 @@ def get_parent_frame_namespace(
 def get_value_or_default(
     first_arg: DefaultType | DefaultPlaceholder[DefaultType],
     *extra_args: DefaultType | DefaultPlaceholder[DefaultType],
+    raise_error: bool = False,
 ) -> DefaultType:
-    """Get the first non-default value from the given arguments; if all are
-    default, return the first argument."""
+    """
+    Get the first valid non-default placeholder value from the given arguments.
+
+    This function evaluates arguments in order, looking for the first "actual"
+    value, i.e. neither an `Undefined` constant nor a `DefaultPlaceholder`
+    instance. If none is found, it falls back to the value contained in the
+    first default placeholder.
+
+    Args:
+        first_arg: The highest priority argument to check.
+        *extra_args: Additional arguments to check in decreasing priority
+            order. This ensure that at least one argument is provided.
+        raise_error: Whether to raise an error or return `Undefined` if all
+            arguments are undefined. Defaults to ``False``.
+
+    Returns:
+        One of the following, in order of precedence:
+        - First argument that is neither undefined nor a default placeholder,
+        - First default placeholder encountered,
+        - Undefined if no other value is found and `raise_error` is ``False``.
+
+    Raises:
+        ValueError: If all arguments are undefined (no actual values or
+            placeholders found) and `raise_error` is set to ``True``.
+    """
     def is_default_placeholder(
         value: DefaultType | DefaultPlaceholder[DefaultType]
     ) -> TypeIs[DefaultPlaceholder[DefaultType]]:
         return isinstance(value, DefaultPlaceholder)
 
+    fallback = Undefined
     args = (first_arg,) + extra_args
     for arg in args:
-        if arg is not Undefined and not is_default_placeholder(arg):
-            return arg
-    if is_default_placeholder(first_arg):
-        return first_arg.value  # type: ignore[no-any-return]
+        if arg is Undefined:
+            continue
+        if is_default_placeholder(arg):
+            if fallback is Undefined:
+                fallback = arg.value
+            continue
+        return arg
+    if not raise_error:
+        return fallback  # type: ignore[no-any-return]
     raise ValueError('All arguments are undefined.')
 
 

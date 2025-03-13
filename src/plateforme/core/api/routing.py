@@ -54,11 +54,14 @@ from ..typing import (
     get_object_name,
     get_value_or_default,
 )
-from .middleware import resolve_bulk_middleware
 from .parameters import DependsInfo
 from .responses import JSONResponse, Response
 from .types import ASGIApp, Lifespan
-from .utils import APIBaseRouteIdentifier, generate_unique_id
+from .utils import (
+    APIBaseRouteIdentifier,
+    generate_unique_id,
+    resolve_bulk_references,
+)
 
 _C = TypeVar('_C', bound=Callable[..., Any])
 _P = ParamSpec('_P')
@@ -323,7 +326,7 @@ class APIRouteConfigDict(  # type: ignore[misc]
     pass
 
 
-class APIRouteConfig(ConfigWrapper, sources=(APIRouteConfigDict,)):
+class APIRouteConfig(ConfigWrapper, definitions=(APIRouteConfigDict,)):
     """An API route configuration."""
 
     path: str | None = None
@@ -1079,7 +1082,7 @@ class APIRouter(_APIRouter):
             generate_unique_id_function, self.generate_unique_id_function
         )
         if force_resolution:
-            endpoint = resolve_bulk_middleware(endpoint)
+            endpoint = resolve_bulk_references(endpoint)
 
         route = route_class(
             self.prefix + path,
@@ -1131,7 +1134,7 @@ class APIRouter(_APIRouter):
         if dependencies:
             current_dependencies.extend(dependencies)
         if force_resolution:
-            endpoint = resolve_bulk_middleware(endpoint)
+            endpoint = resolve_bulk_references(endpoint)
 
         route = APIWebSocketRoute(
             self.prefix + path,

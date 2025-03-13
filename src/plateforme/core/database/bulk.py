@@ -17,7 +17,7 @@ from collections.abc import Generator
 from threading import Lock
 from typing import Any, Awaitable, Generic, Literal, TypeVar
 
-from ..errors import SessionError
+from ..errors import DatabaseError
 from ..typing import is_exception, is_proxy
 from .engines import Result
 from .expressions import Select, and_, or_, select
@@ -309,7 +309,7 @@ class Bulk(ABC, Generic[_T]):
                     if is_exception(result):
                         if not raise_errors:
                             continue
-                        raise SessionError(
+                        raise DatabaseError(
                             f"An unexpected error occurred while resolving "
                             f"bulk references for resource type "
                             f"{entity.__name__!r}."
@@ -326,7 +326,7 @@ class Bulk(ABC, Generic[_T]):
 
                 # Handle resolution result
                 if unresolved and raise_errors:
-                    raise SessionError(
+                    raise DatabaseError(
                         f"Failed to resolve all references for resource type "
                         f"{entity.__name__!r}."
                     )
@@ -514,7 +514,7 @@ def _handle_resolution_query(
         if record_hash not in mapping:
             if not raise_errors:
                 continue
-            raise SessionError(
+            raise DatabaseError(
                 f"A resolved entry with hash {record_hash!r} and value "
                 f"{record_value!r} was not found in the provided mapping."
             )

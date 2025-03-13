@@ -34,6 +34,18 @@ __all__ = (
 
 # MARK: Function Dependencies
 
+async def async_session_dependency() -> AsyncGenerator[AsyncSession, None]:
+    """Get an async database session dependency."""
+    async with async_session_manager(on_missing='raise') as session:
+        yield session
+
+
+def session_dependency() -> Generator[Session, None, None]:
+    """Get a database session dependency."""
+    with session_manager(on_missing='raise') as session:
+        yield session
+
+
 def filter_dependency(
     request: Request, filter: Filter | None = None
 ) -> Filter | None:
@@ -50,23 +62,15 @@ def filter_dependency(
     return Filter(filter or {}, **criteria)
 
 
-async def async_session_dependency() -> AsyncGenerator[AsyncSession, None]:
-    """Get an async session dependency."""
-    async with async_session_manager() as session:
-        yield session
-
-
-def session_dependency() -> Generator[Session, None, None]:
-    """Get a session dependency."""
-    with session_manager() as session:
-        yield session
-
-
 # MARK: Type Dependencies
 
 AsyncSessionDep = Annotated[AsyncSession, Depends(async_session_dependency)]
-"""An async session dependency for use in API route handlers."""
+"""An async database session dependency."""
 
 
 SessionDep = Annotated[Session, Depends(session_dependency)]
-"""A session dependency for use in API route handlers."""
+"""A database session dependency."""
+
+
+FilterDep = Annotated[Filter | None, Depends(filter_dependency)]
+"""A filter query parameters injection dependency."""

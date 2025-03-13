@@ -112,7 +112,7 @@ class OneOrMany(list[_T], Generic[_T]):
         Returns:
             The validated one or many object.
         """
-        if isinstance(obj, (list, set, tuple)):
+        if isinstance(obj, (list, tuple, set)):
             return cls(obj)
         else:
             return cls([obj])
@@ -299,7 +299,9 @@ class TypeAdapterList(Generic[_T]):
         exclude_defaults: bool = False,
         exclude_none: bool = False,
         round_trip: bool = False,
-        warnings: bool = True,
+        warnings: bool | Literal['none', 'warn', 'error'] = True,
+        serialize_as_any: bool = False,
+        context: dict[str, Any] | None = None,
     ) -> Any:
         """Dump an instance of the adapted type to a Python object.
 
@@ -314,7 +316,13 @@ class TypeAdapterList(Generic[_T]):
             exclude_none: Whether to exclude fields with ``None`` values.
             round_trip: Whether to output the serialized data in a way that is
                 compatible with deserialization.
-            warnings: Whether to display serialization warnings.
+            warnings: Whether to log warnings when invalid fields are
+                encountered. ``False`` or ``'none'`` ignores them, ``True`` or
+                ``'warn'`` logs errors, ``'error'`` raises a Pydantic
+                serialization error.
+            serialize_as_any: Whether to serialize fields with duck-typing
+                serialization behavior.
+            context: Additional context to pass to the serializer.
 
         Returns:
             The serialized object.
@@ -332,7 +340,9 @@ class TypeAdapterList(Generic[_T]):
         exclude_defaults: bool = False,
         exclude_none: bool = False,
         round_trip: bool = False,
-        warnings: bool = True,
+        warnings: bool | Literal['none', 'warn', 'error'] = True,
+        serialize_as_any: bool = False,
+        context: dict[str, Any] | None = None,
     ) -> bytes:
         """Serialize an instance of the adapted type to JSON.
 
@@ -347,7 +357,13 @@ class TypeAdapterList(Generic[_T]):
             exclude_none: Whether to exclude fields with a value of ``None``.
             round_trip: Whether to serialize and deserialize the instance to
                 ensure round-tripping.
-            warnings: Whether to emit serialization warnings.
+            warnings: Whether to log warnings when invalid fields are
+                encountered. ``False`` or ``'none'`` ignores them, ``True`` or
+                ``'warn'`` logs errors, ``'error'`` raises a Pydantic
+                serialization error.
+            serialize_as_any: Whether to serialize fields with duck-typing
+                serialization behavior.
+            context: Additional context to pass to the serializer.
 
         Returns:
             The JSON representation of the given instance as bytes.

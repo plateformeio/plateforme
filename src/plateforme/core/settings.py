@@ -25,10 +25,6 @@ from typing import (
     Union,
 )
 
-from pydantic_settings import (
-    BaseSettings as _BaseSettings,
-    SettingsConfigDict as _SettingsConfig,
-)
 from typing_extensions import TypedDict
 
 from .api.base import APIManager
@@ -38,14 +34,15 @@ from .api.requests import Request
 from .api.responses import JSONResponse, Response
 from .api.routing import APIRoute, BaseRoute
 from .api.types import ASGIApp, Lifespan
-from .loaders import Loader
 from .patterns import RegexPattern, parse_email
 from .schema.aliases import AliasChoices
 from .schema.decorators import model_validator
 from .schema.fields import Field
+from .schema.loaders import Loader
 from .schema.models import BaseModel, Model, ModelConfig
+from .schema.settings import BaseSettings
 from .schema.types import Discriminator
-from .types.networks import AnyHttpUrl, Email, EngineMap
+from .types.networks import Email, EngineMap, HttpUrl
 from .types.secrets import SecretStr
 from .typing import DefaultPlaceholder
 
@@ -83,6 +80,7 @@ __all__ = (
     'NamespaceSettings',
     'NamespaceSettingsDict',
     'PackageSettings',
+    'PackageSettingsExtra',
     'PackageSettingsDict',
     'Settings',
     'SettingsDict',
@@ -139,7 +137,7 @@ class ContactInfoDict(TypedDict, total=False):
     """The email address of the contact person or organization. It must be
     formatted as a valid email address. Defaults to ``None``."""
 
-    url: AnyHttpUrl
+    url: HttpUrl
     """A URL pointing to the contact information. It must be formatted as a
     valid URL. Defaults to ``None``."""
 
@@ -167,7 +165,7 @@ class ContactInfo(BaseModel):
         examples=['jane.bloggs@example.com', 'john.doe@example.com'],
     )
 
-    url: AnyHttpUrl | None = Field(
+    url: HttpUrl | None = Field(
         default=None,
         title='URL',
         description="""A URL pointing to the contact information. It must be
@@ -198,7 +196,7 @@ class LicenseInfoDict(TypedDict, total=False):
     with the `url` field. It is available within OpenAPI since version 3.1.0.
     Defaults to ``None``."""
 
-    url: AnyHttpUrl
+    url: HttpUrl
     """A URL pointing to the license information. The `url` field is mutually
     exclusive with the `identifier` field. Defaults to ``None``."""
 
@@ -229,7 +227,7 @@ class LicenseInfo(BaseModel):
         examples=['GPL-3.0-or-later'],
     )
 
-    url: AnyHttpUrl | None = Field(
+    url: HttpUrl | None = Field(
         default=None,
         title='URL',
         description="""A URL pointing to the license information. The `url`
@@ -667,12 +665,12 @@ class APISettings(BaseModel):
             instead.""",
     )
 
-    exception_handlers: Annotated[
-        dict[
-            int | type[Exception],
+    exception_handlers: dict[
+        int | Annotated[type[Exception], Loader()],
+        Annotated[
             Callable[[Request, Any], Coroutine[Any, Any, Response]],
+            Loader(),
         ],
-        Loader(),
     ] | None = Field(
         default=None,
         title='Exception handlers',
@@ -777,11 +775,14 @@ LoggingFormatterSettingsDict = Union[
 """Plateforme logging formatter settings dictionary."""
 
 
-LoggingFormatterSettings = Union[
-    'LoggingCustomFormatterSettings',
-    'LoggingDefaultFormatterSettings',
-    'LoggingJsonFormatterSettings',
-    'LoggingSimpleFormatterSettings',
+LoggingFormatterSettings = Annotated[
+    Union[
+        'LoggingCustomFormatterSettings',
+        'LoggingDefaultFormatterSettings',
+        'LoggingJsonFormatterSettings',
+        'LoggingSimpleFormatterSettings',
+    ],
+    Discriminator('type_'),
 ]
 """Plateforme logging formatter settings."""
 
@@ -1322,10 +1323,13 @@ LoggingHandlerSettingsDict = Union[
 """Plateforme logging handler settings dictionary."""
 
 
-LoggingHandlerSettings = Union[
-    'LoggingCustomHandlerSettings',
-    'LoggingFileHandlerSettings',
-    'LoggingStreamHandlerSettings',
+LoggingHandlerSettings = Annotated[
+    Union[
+        'LoggingCustomHandlerSettings',
+        'LoggingFileHandlerSettings',
+        'LoggingStreamHandlerSettings',
+    ],
+    Discriminator('type_'),
 ]
 """Plateforme logging handler settings."""
 
@@ -1719,9 +1723,7 @@ class LoggingSettings(BaseModel):
         ],
     )
 
-    formatters: dict[
-        str, Annotated[LoggingFormatterSettings, Discriminator('type_')]
-    ] = Field(
+    formatters: dict[str, LoggingFormatterSettings] = Field(
         default_factory=dict,
         title='Formatters',
         description="""A dictionary of logging formatters used in the
@@ -1736,9 +1738,7 @@ class LoggingSettings(BaseModel):
         ],
     )
 
-    handlers: dict[
-        str, Annotated[LoggingHandlerSettings, Discriminator('type_')]
-    ] = Field(
+    handlers: dict[str, LoggingHandlerSettings] = Field(
         default_factory=dict,
         title='Handlers',
         description="""A dictionary of logging handlers used in the
@@ -1856,7 +1856,7 @@ class NamespaceSettingsDict(TypedDict, total=False):
     Defaults to ``None``."""
 
     api: APISettings | APISettingsDict
-    """The namespace API settings. Defaults to an empty dictionary."""
+    """The namespace API settings."""
 
     api_max_depth: int
     """The maximum depth to walk through the resource path to collect manager
@@ -2054,9 +2054,6 @@ class PackageSettingsDict(TypedDict, total=False):
     """Whether to automatically mount the package within the API. When
     disabled, the package must be manually mounted. Defaults to ``True``."""
 
-    api: APIRouterSettings | APIRouterSettingsDict
-    """The package API settings. Defaults to an empty dictionary."""
-
     api_max_depth: int
     """The maximum depth to walk through the resource path to collect manager
     methods from resource dependencies. It is used to generate the API routes
@@ -2067,7 +2064,10 @@ class PackageSettingsDict(TypedDict, total=False):
     used when generating the API routes for resources within the package to
     avoid too many resources being returned. Defaults to ``20``."""
 
-    api_resources: bool | Sequence[str]
+    api_router: APIRouterSettings | APIRouterSettingsDict
+    """The package API router settings."""
+
+    resources: bool | Sequence[str]
     """A boolean, or a list of module or resource fully qualified names
     relative to the package that declares the top-level resources to include
     from the package within the API. When set to ``True``, it includes all
@@ -2076,7 +2076,7 @@ class PackageSettingsDict(TypedDict, total=False):
     Permissions and access control can be applied to these resources.
     Defaults to ``True``."""
 
-    api_services: bool | Sequence[str]
+    services: bool | Sequence[str]
     """A boolean, or a list of module or service fully qualified names relative
     to the package that declares the services to include from the package
     within the API. When set to ``True``, it includes all services exposed
@@ -2091,6 +2091,21 @@ class PackageSettingsDict(TypedDict, total=False):
     """A string that defines the filesystem path of the package module. It is
     used to load package related assets from the filesystem. It defaults to the
     resolved package module path when not provided. Defaults to ``None``."""
+
+    extra: dict[str, Any] | None
+    """Extra package settings that are not part of the standard package
+    settings. These settings are used to extend the package settings for custom
+    implementations and behaviors. Defaults to ``None``."""
+
+
+class PackageSettingsExtra(BaseModel):
+    """Plateforme package extra settings."""
+
+    __config__ = ModelConfig(
+        title='Plateforme package extra settings',
+        extra='allow',
+        strict=False,
+    )
 
 
 class PackageSettings(BaseModel):
@@ -2129,12 +2144,6 @@ class PackageSettings(BaseModel):
             API. When disabled, the package must be manually mounted.""",
     )
 
-    api: APIRouterSettings = Field(
-        default=APIRouterSettings(),
-        title='API',
-        description="""The package API settings.""",
-    )
-
     api_max_depth: int = Field(
         default=2,
         title='API maximum route depth',
@@ -2155,31 +2164,52 @@ class PackageSettings(BaseModel):
             """,
     )
 
-    api_resources: bool | Sequence[str] = Field(
+    api_router: APIRouterSettings = Field(
+        default=APIRouterSettings(),
+        title='API router',
+        description="""The package API router settings.""",
+    )
+
+    resources: bool | Sequence[str] = Field(
         default=True,
-        title='Top-level resources exposed to the API',
+        title='Resource entry points',
         description="""A boolean, or a list of module or resource fully
             qualified names relative to the package that declares the top-level
-            resources to include from the package within the API. When set to
-            `True`, it includes all resources exposed within the `__init__.py`
-            file of the package. When set to `False`, the API will not include
-            any resources from the package. Permissions and access control can
-            be applied to these resources.
+            resources to include from the package and serve as entry points
+            within the application. When set to `True`, it includes all
+            resources exposed within the `__init__.py` file of the package.
+            When set to `False`, the application will not include any resources
+            from the package. Permissions and access control can be applied to
+            these resources.
             """,
         examples=[True, False, ['users.User', 'users.UserGroup']],
     )
 
-    api_services: bool | Sequence[str] = Field(
+    services: bool | Sequence[str] = Field(
         default=True,
-        title='Services exposed to the API',
+        title='Services',
         description="""A boolean, or a list of module or service fully
             qualified names relative to the package that declares the services
-            to include from the package within the API. When set to `True`, it
-            includes all services exposed within the `__init__.py` file of the
-            package. When set to `False`, the API will not include any services
-            from the package. Permissions and access control can be applied to
-            these services.""",
+            to include from the package within the application. When set to
+            `True`, it includes all services exposed within the `__init__.py`
+            file of the package. When set to `False`, the API will not include
+            any services from the package. Permissions and access control can
+            be applied to these services.""",
         examples=[True, False, ['AuthService', 'users.UserService']],
+    )
+
+    requirements: dict[str, str] = Field(
+        default_factory=dict,
+        title='Requirements',
+        description="""A dictionary of package requirements used to define the
+            package dependencies. The keys are the package names and the values
+            are the package version constraints. The requirements are used to
+            install the package dependencies when the application is started.
+            """,
+        examples=[
+            {'postgresql': '>=13.4'},
+            {'requests': '>=2.26.0', 'passlib': '>=1.7.4'},
+        ],
     )
 
     deprecated: bool | None = Field(
@@ -2196,6 +2226,14 @@ class PackageSettings(BaseModel):
             filesystem. It defaults to the resolved package module path when
             not provided.""",
         examples=['/path/to/my_app/core/items'],
+    )
+
+    extra: Annotated[PackageSettingsExtra, Loader()] | None = Field(
+        default=None,
+        title='Extra',
+        description="""Extra package settings that are not part of the standard
+            package settings. These settings are used to extend the package
+            settings for custom implementations and behaviors.""",
     )
 
 
@@ -2355,14 +2393,8 @@ class SettingsDict(TypedDict, total=False):
     """Whether the application is deprecated. Defaults to ``None``."""
 
 
-class Settings(_BaseSettings):
+class Settings(BaseSettings):
     """Plateforme application settings."""
-
-    __config__ = _SettingsConfig(
-        title='Plateforme settings',
-        strict=True,
-        env_prefix='PLATEFORME_',
-    )
 
     # Environment
     context: bool = Field(
@@ -2662,61 +2694,79 @@ class Settings(_BaseSettings):
 # MARK: Utilities
 
 def merge_settings(
-    settings: Model,
-    *others: BaseModel | None,
-    **update: Any,
+    defaults: Model,
+    *updates: BaseModel | dict[str, Any] | None,
+    root_path: str | None = None,
 ) -> Model:
-    """Merge multiple settings into a single settings instance.
+    """Merge multiple settings objects into a single settings model.
 
-    It copies the provided settings model instance and merges other settings
-    model instances into for matching fields. The last settings model instance
-    has precedence over the previous ones. Additional settings can be provided
-    as keyword arguments, where a `DefaultPlaceholder` can be used to set a
-    default value for a field when no previous settings have set it.
+    This function performs a deep merge of settings from multiple sources, with
+    later updates taking precedence over earlier ones. It implements special
+    handling for nested models, collections (lists, sets, tuples), and
+    dictionaries.
 
     Args:
-        settings: The settings model instance to copy and use as a base.
-        *others: The other settings model instances to merge into the base.
-        **update: Values to add/modify within the new model. Note that the
-            integrity of the data is not validated when creating the new model.
-            Data should be trusted or pre-validated in this case. Additionaly
-            it can include `DefaultPlaceholder` values to set default values
-            for settings model fields.
+        defaults: Base settings model to use as the starting point. A copy of
+            this model will be used, preserving the original.
+        *updates: Additional settings to merge in order of precedence. Each
+            update can be a model instance or a dictionary. The value updates
+            containing default placeholders will only be used when the field
+            hasn't been previously set.
+        root_path: Used internally for tracking the path during recursive
+            merges of nested models, providing context for special handling.
+            Defaults to ``None``.
 
     Returns:
-        The merged settings model instance.
-
-    Raises:
-        ValidationError: If the merged settings are invalid.
+        A new model instance of the same type as the provided `defaults` with
+        all settings merged according to precedence rules.
     """
-    # Create a new settings model instance
-    data = settings.model_dump(exclude_defaults=True)
+    merged = defaults.model_copy(deep=False)
 
-    # Merge other settings
-    for other in others:
-        if other is None:
+    for update in updates:
+        if update is None:
             continue
-        for key in other.model_fields_set:
-            if key not in settings.model_fields:
-                continue
-            settings_field = settings.model_fields[key]
-            other_field = other.model_fields[key]
-            if settings_field.annotation == other_field.annotation:
-                data[key] = getattr(other, key)
+        elif isinstance(update, BaseModel):
+            update = update.model_dump(mode='raw', exclude_unset=True)
 
-    # Update settings
-    for key, value in update.items():
-        if key not in settings.model_fields:
-            continue
-        if isinstance(value, DefaultPlaceholder):
-            if key in data:
+        for key, value in update.items():
+            # Handle update default placeholders
+            if isinstance(value, DefaultPlaceholder):
+                if key in defaults.model_fields_set:
+                    continue
+                value = value.value
+            # Handle defaults unset fields
+            if key not in defaults.model_fields_set:
+                object.__setattr__(merged, key, value)
                 continue
-            data[key] = value.value
-        else:
-            data[key] = value
 
-    # Validate settings
-    return settings.model_construct(**data)
+            existing = getattr(merged, key)
+
+            # Handle collections
+            if isinstance(value, (list, set, tuple)):
+                if isinstance(existing, list):
+                    value = list([*existing, *value])
+                elif isinstance(existing, set):
+                    value = set([*existing, *value])
+                elif isinstance(existing, tuple):
+                    value = tuple([*existing, *value])
+            # Handle dictionaries
+            elif isinstance(value, dict):
+                if isinstance(existing, dict):
+                    value = {**existing, **value}
+            # Handle models
+            elif isinstance(value, BaseModel):
+                if isinstance(existing, BaseModel):
+                    value = merge_settings(
+                        existing,
+                        value,
+                        root_path=f'{root_path}.{key}' if root_path else key,
+                    )
+
+            object.__setattr__(merged, key, value)
+
+    if root_path is None:
+        merged.model_revalidate(force=True)
+    return merged
 
 
 ADJECTIVES = (

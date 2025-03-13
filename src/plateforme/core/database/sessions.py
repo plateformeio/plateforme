@@ -27,7 +27,7 @@ from sqlalchemy.orm import (
 )
 
 from ..context import PLATEFORME_CONTEXT, SESSION_BULK_CONTEXT, SESSION_CONTEXT
-from ..errors import DatabaseError, SessionError
+from ..errors import DatabaseError
 from .base import DatabaseManager
 from .bulk import Bulk
 from .engines import AsyncConnection, AsyncEngine, Connection, Engine
@@ -591,7 +591,7 @@ async def async_session_manager(
             factory = app.async_session
     # Check factory
     if factory is None:
-        raise SessionError(
+        raise DatabaseError(
             "No session factory available in the current context."
         )
 
@@ -604,9 +604,7 @@ async def async_session_manager(
         yield session
     except Exception as error:
         await session.rollback()
-        raise DatabaseError(
-            "An error occurred while executing a database operation."
-        ) from error
+        raise error
     else:
         await finalize(session)
     finally:
@@ -697,7 +695,7 @@ def session_manager(
             factory = app.session
     # Check factory
     if factory is None:
-        raise SessionError(
+        raise DatabaseError(
             "No session factory available in the current context."
         )
 
@@ -710,9 +708,7 @@ def session_manager(
         yield session
     except Exception as error:
         session.rollback()
-        raise DatabaseError(
-            "An error occurred while executing a database operation."
-        ) from error
+        raise error
     else:
         finalize(session)
     finally:

@@ -26,7 +26,7 @@ import typing
 from collections.abc import Iterable
 from functools import wraps
 from types import ModuleType
-from typing import Any, Callable, ForwardRef, Self, Unpack
+from typing import Any, Callable, ForwardRef, Self, TypeVar, Unpack
 
 from . import runtime
 from .api.routing import (
@@ -57,7 +57,7 @@ from .services import (
     load_service,
     unbind_service,
 )
-from .settings import PackageSettings, merge_settings
+from .settings import PackageSettings, PackageSettingsExtra, merge_settings
 from .specs import resolve_schema_model
 from .typing import (
     Annotation,
@@ -72,11 +72,16 @@ if typing.TYPE_CHECKING:
     from .main import Plateforme
     from .resources import ResourceFieldInfo, ResourceType
 
+_TExtra = TypeVar('_TExtra', bound=PackageSettingsExtra)
+
 __all__ = (
     'Package',
     'PackageImpl',
-    'collect_api_resources',
-    'collect_api_services',
+    'PackageManager',
+    'collect_resources',
+    'collect_services',
+    'get_current_package',
+    'get_current_package_extra',
 )
 
 
@@ -682,7 +687,7 @@ class PackageImpl(Proxy[Package], Representation):
 
         # Initialize services
         object.__setattr__(self, 'services', ())
-        services = collect_api_services(self)
+        services = collect_services(self)
         for service in services:
             self._add_services(service)
 
@@ -814,13 +819,13 @@ class PackageImpl(Proxy[Package], Representation):
             for name in methods:
                 self.objects._remove_method(name)
 
-    def _collect_api_resources(self) -> set['ResourceType']:
-        """Collect the top-level resources exposed to the API."""
-        return collect_api_resources(self)
+    def _collect_resources(self) -> set['ResourceType']:
+        """Collect the package resource entry points."""
+        return collect_resources(self)
 
-    def _collect_api_services(self) -> set[BaseService]:
-        """Collect the services exposed to the API."""
-        return collect_api_services(self)
+    def _collect_services(self) -> set[BaseService]:
+        """Collect the package services."""
+        return collect_services(self)
 
     def _create_router(
         self, **overrides: Unpack[APIRouterConfigDict]
@@ -837,7 +842,7 @@ class PackageImpl(Proxy[Package], Representation):
             deprecated=self.settings.deprecated,
             generate_unique_id_function=lambda route: \
                 generate_unique_id(route, package=self.package),
-            **self.settings.api.model_dump(),
+            **self.settings.api_router.model_dump(),
         )
         config.update(overrides)
 
@@ -845,7 +850,7 @@ class PackageImpl(Proxy[Package], Representation):
         router = APIRouter(**config)
 
         # Include resources
-        for resource in self._collect_api_resources():
+        for resource in self._collect_resources():
             router.include_router(resource._create_router())
 
         # Include services
@@ -899,18 +904,61 @@ class PackageImpl(Proxy[Package], Representation):
             yield ('app', self.context)
 
 
+# MARK: Context
+
+def get_current_package() -> PackageImpl:
+    caller = get_parent_frame_namespace(depth=2, mode='globals') or {}
+    name = caller.get('__name__')
+    if name is None:
+        raise PlateformeError(
+            "Cannot determine the package module name from the caller "
+            "namespace.",
+            code='plateforme-invalid-module',
+        )
+    impl = runtime.import_package_impl(
+        name,
+        context=PLATEFORME_CONTEXT.get(),
+        force_resolution=True,
+    )
+    return impl
+
+
+@typing.overload
+def get_current_package_extra(
+    __type: None = None
+) -> PackageSettingsExtra | None:
+    ...
+
+@typing.overload
+def get_current_package_extra(
+    __type: type[_TExtra]
+) -> _TExtra:
+    ...
+
+def get_current_package_extra(
+    __type: type[_TExtra] | None = None
+) -> PackageSettingsExtra | _TExtra | None:
+    impl = get_current_package()
+    if __type is not None and not isinstance(impl.settings.extra, __type):
+        raise TypeError(
+            f"Invalid package extra settings for package {impl.name!r}. "
+            f"The extra settings must be an instance of {__type!r}.",
+        )
+    return impl.settings.extra
+
+
 # MARK: Utilities
 
-def collect_api_resources(
+def collect_resources(
     package: PackageImpl,
     *,
     include: Iterable[str] | None = None,
     exclude: Iterable[str] | None = None,
 ) -> set['ResourceType']:
-    """Collect API resources from a package.
+    """Collect a package resource entry points.
 
     Args:
-        package: The package to collect API resources from.
+        package: The package to collect resource entry points for.
         include: An iterable of module or resource names that should be
             included in the collection. If provided, only the resources with
             the specified names are included. Defaults to ``None``.
@@ -950,7 +998,7 @@ def collect_api_resources(
                 resources.add(member)
 
     # Retrieve lookup settings
-    if settings := package.settings.api_resources:
+    if settings := package.settings.resources:
         lookup = ['.'] if settings is True else list(settings)
     else:
         return set()
@@ -981,16 +1029,16 @@ def collect_api_resources(
     return resources
 
 
-def collect_api_services(
+def collect_services(
     package: PackageImpl,
     *,
     include: Iterable[str] | None = None,
     exclude: Iterable[str] | None = None,
 ) -> set[BaseService]:
-    """Collect API services from a package.
+    """Collect a package services.
 
     Args:
-        package: The package to collect API services from.
+        package: The package to collect services for.
         include: An iterable of module or service names that should be included
             in the collection. If provided, only the services with the
             specified names are included. Defaults to ``None``.
@@ -1041,7 +1089,7 @@ def collect_api_services(
                 services.add(member)
 
     # Retrieve lookup settings
-    if settings := package.settings.api_services:
+    if settings := package.settings.services:
         lookup = ['.'] if settings is True else list(settings)
     else:
         return set()

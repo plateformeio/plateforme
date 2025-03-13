@@ -82,6 +82,7 @@ FORBIDDEN_ATTRS = (
     r'get_many',
     r'model',
     r'model_.*',
+    r'objects',
     r'resource',
     r'resource_.*',
     r'service',

@@ -40,9 +40,9 @@ if typing.TYPE_CHECKING:
     from .expressions import IncEx
     from .packages import Package
     from .resources import (
-        BaseResource,
         ResourceConfig,
         ResourceFieldInfo,
+        ResourceManager,
         ResourceType,
     )
     from .selectors import Key
@@ -50,6 +50,7 @@ if typing.TYPE_CHECKING:
 __all__ = (
     'BaseSpec',
     'CRUDSpec',
+    'Identity',
     'Spec',
     'SpecFacade',
     'SpecType',
@@ -64,6 +65,10 @@ Spec = TypeVar('Spec', bound='BaseSpec')
 
 SpecType = Type['BaseSpec']
 """A type alias for a specification class."""
+
+
+Identity = int | str | UUID4
+"""A type alias for the identity field of a resource."""
 
 
 # MARK: Service Facade
@@ -167,11 +172,12 @@ class BaseSpec(Protocol):
             facade._register_schema(model.__qualname__, __base__=model)
 
     # Class fields
-    id: int | UUID4 | None
+    id: Identity | None
     type_: str
 
     # Class attributes
-    resource_adapter: TypeAdapterList['BaseResource']
+    objects: ResourceManager[Self]  # type: ignore[type-var]
+    resource_adapter: TypeAdapterList[Self]
     resource_attributes: dict[str, 'InstrumentedAttribute[Any]']
     resource_computed_fields: dict[str, ComputedFieldInfo]
     resource_config: 'ResourceConfig'
@@ -274,7 +280,9 @@ class BaseSpec(Protocol):
         exclude_defaults: bool = False,
         exclude_none: bool = False,
         round_trip: bool = False,
-        warnings: bool = True,
+        warnings: bool | Literal['none', 'warn', 'error'] = True,
+        serialize_as_any: bool = False,
+        context: Any | None = None,
     ) -> dict[str, Any]:
         ...
 
@@ -289,7 +297,9 @@ class BaseSpec(Protocol):
         exclude_defaults: bool = False,
         exclude_none: bool = False,
         round_trip: bool = False,
-        warnings: bool = True,
+        warnings: bool | Literal['none', 'warn', 'error'] = True,
+        serialize_as_any: bool = False,
+        context: Any | None = None,
     ) -> str:
         ...
 
@@ -331,7 +341,7 @@ class BaseSpec(Protocol):
 
     # Schemas
     class Model:
-        id: int | UUID4 | None
+        id: Identity | None
         type_: str | None
         ...
 
@@ -342,12 +352,12 @@ class CRUDSpec(BaseSpec):
     """The CRUD specification."""
 
     class Create(BaseModel):
-        id: int | UUID4 | None
+        id: Identity | None
         type_: str | None
         ...
 
     class Read(BaseModel):
-        id: int | UUID4 | None
+        id: Identity | None
         type_: str | None
         ...
 
@@ -355,7 +365,7 @@ class CRUDSpec(BaseSpec):
         ...
 
     class Upsert(BaseModel):
-        id: int | UUID4 | None
+        id: Identity | None
         type_: str | None
         ...
 

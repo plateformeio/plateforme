@@ -34,6 +34,7 @@ __all__ = (
     'ProjectAppInfo',
     'ProjectContactInfo',
     'ProjectLicenseInfo',
+    'ProjectPackageInfo',
     'import_project_info',
     'resolve_project_path',
 )
@@ -132,6 +133,15 @@ class ProjectAppInfo(BaseModel):
             )
 
         return module_app
+
+
+class ProjectPackageInfo(PackageSettings):
+    """Project package information."""
+
+    __config__ = ModelConfig(
+        title='Project package information',
+        strict=False,
+    )
 
 
 class ProjectContactInfo(BaseModel):
@@ -333,10 +343,12 @@ class ProjectInfo(BaseModel):
             """,
     )
 
-    package: PackageSettings | None = Field(
+    package: ProjectPackageInfo | None = Field(
         default=None,
         title='Package',
-        description="""The package default settings of the project.""",
+        description="""The project package settings of the project. It is used
+            to define the project package default settings, and optionally
+            specify the package extra settings model.""",
     )
 
     directory: str = Field(

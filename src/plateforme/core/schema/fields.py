@@ -119,6 +119,7 @@ if typing.TYPE_CHECKING:
 _TProperty = TypeVar('_TProperty')
 
 __all__ = (
+    'BackrefFieldInfoDict',
     'ComputedFieldInfo',
     'ConfigField',
     'Field',
@@ -127,7 +128,6 @@ __all__ = (
     'FieldInfoDict',
     'FieldInfoMeta',
     'FieldLookup',
-    'BackrefFieldInfoDict',
     'PrivateAttr',
     'computed_field',
 )
@@ -246,6 +246,19 @@ class BaseFieldInfoDict(TypedDict, total=False):
     kw_only: bool | None
     """Whether or not the field should be a keyword-only argument in the
     constructor of the model. Defaults to ``None``."""
+
+
+class ConfigFieldInfoDict(TypedDict, total=False):
+    """A configuration field information dictionary.
+
+    A dictionary that holds the configuration parameters for a field
+    information instance. It includes additional parameters that are specific
+    to configuration field information within the Plateforme framework.
+    """
+
+    final: bool | None
+    """Whether or not the field is final, i.e. the field value cannot be
+    overridden in subclasses once set. Defaults to ``None``."""
 
 
 class ModelFieldInfoDict(TypedDict, total=False):
@@ -613,6 +626,7 @@ class BackrefFieldInfoDict(TypedDict, total=False):
 class FieldInfoDict(
     SourceFieldInfoDict[Object],
     BaseFieldInfoDict,
+    ConfigFieldInfoDict,
     ModelFieldInfoDict,
     ResourceFieldInfoDict,
     Generic[Object],
@@ -622,21 +636,24 @@ class FieldInfoDict(
 
     A dictionary that provides all the configuration parameters for a field
     information instance within the Plateforme framework. It combines the
-    `SourceFieldInfoDict`, `BaseFieldInfoDict`,  `ModelFieldInfoDict`, and
-    `ResourceFieldInfoDict` configuration dictionaries into a single
-    comprehensive dictionary.
+    `SourceFieldInfoDict`, `BaseFieldInfoDict`, `ConfigFieldInfoDict`,
+    `ModelFieldInfoDict`, and `ResourceFieldInfoDict` configuration
+    dictionaries into a single comprehensive dictionary.
     """
     pass
 
 
 class FieldInfoFromConfigDict(
     BaseFieldInfoDict,
+    ConfigFieldInfoDict,
     total=False,
 ):
-    """A field information configuration dictionary for a config function.
+    """A field information configuration dictionary for config field function.
 
     It is used to define a field information instance with the `ConfigField`
-    function for configuration wrappers.
+    function for configuration wrappers. It combines the `BaseFieldInfoDict`
+    and `ConfigFieldInfoDict` configuration dictionaries into a single
+    comprehensive dictionary.
     """
     pass
 
@@ -647,10 +664,29 @@ class FieldInfoFromFieldDict(
     ResourceFieldInfoDict,
     total=False,
 ):
-    """A field information configuration dictionary for a field function.
+    """A field information configuration dictionary for field function.
 
     It is used to define a field information instance with the `Field` function
-    for models and resources.
+    for models and resources. It combines the `BaseFieldInfoDict`,
+    `ModelFieldInfoDict`, and `ResourceFieldInfoDict` configuration
+    dictionaries into a single comprehensive dictionary.
+    """
+    pass
+
+
+class FieldInfoFromAllDict(
+    BaseFieldInfoDict,
+    ConfigFieldInfoDict,
+    ModelFieldInfoDict,
+    ResourceFieldInfoDict,
+    total=False,
+):
+    """A field information configuration dictionary for all field functions.
+
+    It is used to define a field information instance with the `Field` and
+    `ConfigField` functions for models, resources, and configuration wrappers.
+    It combines the `FieldInfoFromConfigDict` and `FieldInfoFromFieldDict`
+    configuration dictionaries into a single comprehensive dictionary.
     """
     pass
 
@@ -753,6 +789,9 @@ class FieldInfo(
             of the dataclass, and not stored. Defaults to ``None``.
         kw_only: Whether or not the field should be a keyword-only argument in
             the constructor of the model. Defaults to ``None``.
+        final: Whether or not the field is final, i.e. the field value cannot
+            be overridden in subclasses once set. This is used specifically for
+            configuration fields. Defaults to ``None``.
         validation_alias: The validation alias name of the field. It must
             adhere to a specific ``ALIAS`` pattern as defined in the
             framework's regular expressions repository.
@@ -880,6 +919,8 @@ class FieldInfo(
     init: bool
     init_var: bool | None
     kw_only: bool | None
+    # Configuration field information
+    final: bool | None
     # Model field information
     validation_alias: str | AliasPath | AliasChoices | None
     serialization_alias: str | None
@@ -937,6 +978,8 @@ class FieldInfo(
         'init',
         'init_var',
         'kw_only',
+        # Configuration field information
+        'final',
         # Model field information
         'validation_alias',
         'serialization_alias',
@@ -1039,6 +1082,7 @@ class FieldInfo(
         self.init = kwargs_copy.pop('init', True)
         self.init_var = kwargs_copy.pop('init_var', None)
         self.kw_only = kwargs_copy.pop('kw_only', None)
+        self.final = kwargs_copy.pop('final', None)
         self.validation_alias = kwargs_copy.pop('validation_alias', None)
         self.serialization_alias = kwargs_copy.pop('serialization_alias', None)
         self.exclude = kwargs_copy.pop('exclude', None)
@@ -1125,9 +1169,9 @@ class FieldInfo(
             A new field info instance with the given annotation and metadata.
         """
         # Check if the annotation is a final variable
-        final: bool = Undefined
+        frozen: bool = Undefined
         if is_finalvar(annotation):
-            final = True
+            frozen = True
             if annotation is not Final:  # type: ignore[comparison-overlap]
                 annotation = typing.get_args(annotation)[0]
 
@@ -1135,7 +1179,7 @@ class FieldInfo(
         if is_annotated(annotation):
             annotation_type, *extra_args = typing.get_args(annotation)
             if is_finalvar(annotation_type):
-                final = True
+                frozen = True
             annotation_metadata: list[Any] = []
             for arg in extra_args:
                 if not isinstance(arg, _FieldInfo):
@@ -1148,7 +1192,7 @@ class FieldInfo(
                 owner=owner,
                 name=name,
                 annotation=annotation_type,
-                frozen=final,
+                frozen=frozen,
             )
             field_info.metadata = annotation_metadata
             return field_info
@@ -1159,7 +1203,7 @@ class FieldInfo(
             owner=owner,
             name=name,
             annotation=annotation,
-            frozen=final,
+            frozen=frozen,
         )
 
     @classmethod
@@ -1207,9 +1251,9 @@ class FieldInfo(
             )
 
         # Check if the annotation is a final variable
-        final: bool = Undefined
+        frozen: bool = Undefined
         if is_finalvar(annotation):
-            final = True
+            frozen = True
             if annotation is not Final:  # type: ignore[comparison-overlap]
                 annotation = typing.get_args(annotation)[0]
 
@@ -1224,7 +1268,7 @@ class FieldInfo(
                 owner=owner,
                 name=name,
                 annotation=annotation_type,
-                frozen=final,
+                frozen=frozen,
             )
             field_info.metadata += annotation_metadata
             return field_info
@@ -1247,7 +1291,7 @@ class FieldInfo(
                 owner=owner,
                 name=name,
                 annotation=annotation_type,
-                frozen=final,
+                frozen=frozen,
                 init_var=init_var,
             )
             field_info.metadata += annotation_metadata
@@ -1269,7 +1313,7 @@ class FieldInfo(
                 name=name,
                 annotation=annotation_type,
                 default=default,
-                frozen=final,
+                frozen=frozen,
             )
             field_info.metadata = annotation_metadata
             return field_info
@@ -1281,12 +1325,12 @@ class FieldInfo(
             name=name,
             annotation=annotation,
             default=default,
-            frozen=final,
+            frozen=frozen,
         )
 
     @classmethod
     def from_field(  # type: ignore[override, unused-ignore]
-        cls, default: Any = Undefined, **kwargs: Unpack[FieldInfoFromFieldDict]
+        cls, default: Any = Undefined, **kwargs: Unpack[FieldInfoFromAllDict]
     ) -> Self:
         """Create a field info object instance with a field function.
 
@@ -1295,7 +1339,7 @@ class FieldInfo(
                 argument is used to set the default, use ellipsis ``...`` to
                 indicate the field is required.
             **kwargs: Additional keyword arguments. See the field information
-                configuration dictionary `FieldInfoFromFieldDict` for more
+                configuration dictionary `FieldInfoFromAllDict` for more
                 information on the expected keyword arguments.
 
         Raises:
@@ -2296,11 +2340,8 @@ class FieldInfo(
 
         The provided keyword arguments are used to update the field information
         attributes. The update is performed in-place with the `_attributes_set`
-        dictionary attribute updated accordingly for non set values.
-
-        If a non-default value exists, it is persisted in the `_attributes_set`
-        dictionary, otherwise the `_attributes_set` dictionary is updated with
-        the provided default value.
+        dictionary attribute updated accordingly for default values not set to
+        ``Deferred`` or ``Undefined`` .
 
         Args:
             **kwargs: Additional keyword arguments. See the field information
@@ -2312,23 +2353,22 @@ class FieldInfo(
             default values and should not be used directly.
         """
         for key, default in kwargs.items():
-            if key in self._attributes_set:
+            value = self._attributes_set.get(key, Undefined)
+            if value not in (Deferred, Undefined):
                 continue
-            value = getattr(self, key, None)
-            if value in (Undefined, None):
-                value = default
-                setattr(self, key, value)
-            if value is Undefined:
+            setattr(self, key, default)
+            if default in (Deferred, Undefined):
                 self._attributes_set.pop(key, None)
             else:
-                self._attributes_set[key] = value
+                self._attributes_set[key] = default
 
     def _update(self, **kwargs: Unpack[FieldInfoDict[Any]]) -> None:
         """Update and set the field information.
 
         The provided keyword arguments are used to update the field information
         attributes. The update is performed in-place with the `_attributes_set`
-        dictionary attribute updated accordingly for non ``Undefined`` values.
+        dictionary attribute updated accordingly for update values not set to
+        ``Deferred`` or ``Undefined`` .
 
         Args:
             **kwargs: Additional keyword arguments. See the field information
@@ -2341,7 +2381,7 @@ class FieldInfo(
         """
         for key, value in kwargs.items():
             setattr(self, key, value)
-            if value is Undefined:
+            if value in (Deferred, Undefined):
                 self._attributes_set.pop(key, None)
             else:
                 self._attributes_set[key] = value

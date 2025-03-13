@@ -9,10 +9,21 @@
 This module is a proxy for the Plateforme framework core errors module.
 """
 
-from .core.errors import *  # noqa: F403
+from .core.errors import (
+    AuthenticationError,
+    DatabaseError,
+    MissingDeferred,
+    PlateformeError,
+    SecurityError,
+)
 
-__all__ = [name for name in dir() if not name.startswith('_')]
-
-
-def __dir__() -> list[str]:
-    return list(__all__)
+__all__ = (
+    # Framework
+    'AuthenticationError',
+    'DatabaseError',
+    'SecurityError',
+    # User
+    'PlateformeError',
+    # Miscellaneous
+    'MissingDeferred',
+)

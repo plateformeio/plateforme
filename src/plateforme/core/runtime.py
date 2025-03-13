@@ -850,7 +850,10 @@ def import_namespace(
 
 
 def import_namespace_impl(
-    name: str, context: 'Plateforme | None' = None
+    name: str,
+    *,
+    context: 'Plateforme | None' = None,
+    create_if_missing : bool = False,
 ) -> 'NamespaceImpl':
     """Import a namespace implementation.
 
@@ -858,12 +861,16 @@ def import_namespace_impl(
         name: The name of the namespace implementation to be resolved.
         context: The application context to use for the namespace
             implementation. Defaults to ``None``.
+        create_if_missing: When set to ``True``, creates a new namespace with
+            the specified name if it is not available in the runtime
+            environment. If ``False``, the function raises an error for
+            non-existent namespaces. Defaults to ``False``.
 
     Returns:
         The namespace implementation associated with the specified name and
         application context.
     """
-    namespace = import_namespace(name)
+    namespace = import_namespace(name, create_if_missing=create_if_missing)
 
     if context not in namespace._impls:
         raise ImportError(
@@ -881,25 +888,26 @@ def import_package(
     force_resolution: bool = False,
     raise_warnings: bool = True,
 ) -> 'Package':
-    """Import the package from the specified module name.
+    """Import a package.
 
-    When the module name is not recognized as a valid package module name, it
-    raises an error if the resolution is not forced. Otherwise, it tries to
-    resolve the specified module name to a valid one (i.e. a parent module that
-    defines a project configuration file).
+    When the name is not recognized as a valid package name, it raises an error
+    if the resolution is not forced. Otherwise, it tries to resolve the
+    specified name to a valid one (i.e. a parent module that defines a project
+    configuration file).
 
     Args:
-        name: The exact name of the package module to be resolved.
-        module: The module to use as the anchor point for relative imports.
+        name: The exact name of the package to be resolved.
+        module: The module name to use as the anchor point for relative
+            imports. Defaults to ``None``.
         force_resolution: When set to ``True``, forces the resolution of an
-            unrecognized module name to a valid package module name. If
-            ``False``, the function raises an error for invalid names.
+            unrecognized package name to a valid package name. If ``False``,
+            the function raises an error for invalid names.
             Defaults to ``False``.
         raise_warnings: Whether to log warnings when invalid package
             configurations are encountered. Defaults to ``True``.
 
     Returns:
-        The package instance associated with the specified module name.
+        The package instance associated with the specified name.
     """
     from .modules import (
         get_root_module_name,
@@ -1051,20 +1059,37 @@ def import_package(
 
 def import_package_impl(
     name: str,
+    module: str | None = None,
+    *,
     context: 'Plateforme | None' = None,
+    force_resolution: bool = False,
+    raise_warnings: bool = True,
 ) -> 'PackageImpl':
-    """Import a package module name implementation.
+    """Import a package implementation.
 
     Args:
-        name: The exact name of the package module to be resolved.
+        name: The exact name of the package to be resolved.
+        module: The module name to use as the anchor point for relative
+            imports. Defaults to ``None``.
         context: The application context to use for the package implementation.
             Defaults to ``None``.
+        force_resolution: When set to ``True``, forces the resolution of an
+            unrecognized package name to a valid package name. If ``False``,
+            the function raises an error for invalid names.
+            Defaults to ``False``.
+        raise_warnings: Whether to log warnings when invalid package
+            configurations are encountered. Defaults to ``True``.
 
     Returns:
-        The package implementation associated with the specified module name
-        and application context.
+        The package implementation associated with the specified name and
+        application context.
     """
-    package = import_package(name)
+    package = import_package(
+        name,
+        module,
+        force_resolution=force_resolution,
+        raise_warnings=raise_warnings,
+    )
 
     if context not in package._impls:
         raise ImportError(

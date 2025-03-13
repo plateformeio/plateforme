@@ -73,7 +73,6 @@ PROTECTED_ATTRS = (
     r'keys',
     r'merge',
     r'pop',
-    r'post_init',
     r'setdefault',
     r'update',
     r'validate',
@@ -82,9 +81,9 @@ PROTECTED_ATTRS = (
 
 __all__ = (
     'Config',
+    'ConfigDefinition',
     'ConfigDict',
     'ConfigFieldInfo',
-    'ConfigSource',
     'ConfigType',
     'ConfigWrapper',
     'ConfigWrapperMeta',
@@ -95,7 +94,7 @@ __all__ = (
 )
 
 
-Config = TypeVar('Config', bound='ConfigWrapper')
+Config = TypeVar('Config', bound='ConfigWrapper', covariant=True)
 """A type variable for configuration classes."""
 
 
@@ -103,12 +102,12 @@ ConfigType = Type['ConfigWrapper']
 """A type alias for configuration classes."""
 
 
+ConfigDefinition = Type[Dict[str, Any]]
+"""A type alias for a configuration dictionary definition."""
+
+
 ConfigFieldInfo = FieldInfo['ConfigType']
 """A type alias for a configuration wrapper field information."""
-
-
-ConfigSource = Type[Dict[str, Any]]
-"""A type alias for configuration dictionary sources."""
 
 
 # MARK: Configuration Wrapper Metaclass
@@ -129,7 +128,7 @@ class ConfigWrapperMeta(type):
         namespace: dict[str, Any],
         __reset_parent_namespace: bool = True,
         /,
-        sources: tuple[ConfigSource, ...] = (),
+        definitions: tuple[ConfigDefinition, ...] = (),
         **kwargs: Any,
     ) -> type:
         """Create a new configuration class.
@@ -138,17 +137,17 @@ class ConfigWrapperMeta(type):
             __reset_parent_namespace: Flag indicating whether to reset the
                 parent namespace for the configuration wrapper.
                 Defaults to ``True``.
-            sources: The configuration dictionary sources to collect the fields
-                from. These dictionaries must be subclasses of a typed
-                dictionary. Defaults to an empty tuple.
+            definitions: The configuration dictionary definitions to collect
+                the fields from. These dictionaries must be subclasses of a
+                typed dictionary. Defaults to an empty tuple.
             **kwargs: The default values provided in addition to those in the
                 configuration wrapper namespace.
         """
-        # Check if configuration dictionary sources is iterable
-        if not isinstance(sources, tuple):
+        # Check if configuration dictionary definitions is iterable
+        if not isinstance(definitions, tuple):
             raise TypeError(
-                f"Configuration dictionary sources to wrap must be provided "
-                f"as a tuple. Got: {type(sources).__name__}."
+                f"Configuration dictionary definitions to wrap must be "
+                f"provided as a tuple. Got: {type(definitions).__name__}."
             )
 
         # Create configuration class with the updated namespace
@@ -164,16 +163,16 @@ class ConfigWrapperMeta(type):
         if isinstance(parent_namespace, dict):
             parent_namespace = PickleWeakRef.unpack_dict(parent_namespace)
 
-        # Retrieve parent sources
-        parent_sources = getattr(cls, '__config_sources__', ())
-        sources = tuple(dict.fromkeys(parent_sources + sources))
+        # Retrieve parent dictionary definitions
+        parent_definitions = getattr(cls, '__config_definitions__', ())
+        definitions = tuple(dict.fromkeys(parent_definitions + definitions))
 
         # Collect configuration fields from the configuration dictionary
-        # sources and the class namespace, and apply the defaults gathered from
-        # the keyword arguments to the configuration fields.
+        # definitions and the class namespace, and apply the defaults gathered
+        # from the keyword arguments to the configuration fields.
         types_namespace = get_cls_types_namespace(cls, parent_namespace)
         fields = cls.collect_config_fields(
-            bases, types_namespace, *sources, **kwargs
+            bases, types_namespace, *definitions, **kwargs
         )
 
         # Create validators for the configuration fields
@@ -188,9 +187,9 @@ class ConfigWrapperMeta(type):
             except Exception:
                 pass
 
-        # Set configuration fields and sources
+        # Initialize configuration wrapper class attributes
+        setattr(cls, '__config_definitions__', definitions)
         setattr(cls, '__config_fields__', fields)
-        setattr(cls, '__config_sources__', sources)
         setattr(cls, '__config_validators__', validators)
 
         return cls
@@ -199,39 +198,42 @@ class ConfigWrapperMeta(type):
         cls,
         bases: tuple[type, ...],
         types_namespace: dict[str, Any] | None,
-        *sources: ConfigSource,
+        *definitions: ConfigDefinition,
         **defaults: Any,
     ) -> dict[str, ConfigFieldInfo]:
         """Collect configuration fields for the configuration wrapper.
 
         The configuration fields are collected from the wrapper class
-        definition and the provided configuration dictionary sources. The
-        configuration fields are checked for consistency in type across sources
-        and for the presence of default values for non-required fields.
+        definition and the provided configuration dictionary definitions. The
+        configuration fields are checked for consistency in type across
+        definitions and for the presence of default values for non-required
+        fields.
 
         Args:
             bases: The configuration wrapper base classes to collect the
                 configuration fields from.
             types_namespace: The types namespace of the configuration wrapper
                 to look for type hints.
-            *sources: The configuration dictionary sources to collect the
-                fields from. These dictionaries must be subclasses of a typed
-                dictionary.
+            *definitions: The configuration dictionary definitions to collect
+                the fields from. These dictionaries must be subclasses of a
+                typed dictionary.
             **defaults: Optional default values to provide in addition to those
                 in the configuration wrapper namespace. It is typically set
                 with keyword arguments in the configuration wrapper definition.
 
         Returns:
             A dictionary containing the configuration fields collected from the
-            wrapper class definition and the configuration dictionary sources.
+            wrapper class definition and the configuration dictionary
+            definitions.
 
         Raises:
             AttributeError: If a configuration field conflicts with a protected
                 member attribute or is not present in the class namespace when
                 setting a default value.
-            TypeError: If a configuration dictionary source is not a valid
+            TypeError: If a configuration dictionary definition is not a valid
                 subclass of a typed dictionary or if a configuration field has
-                different annotations in the configuration dictionary sources.
+                different annotations in the configuration dictionary
+                definitions.
             ValueError: If a not required configuration field does not have a
                 default value.
         """
@@ -239,23 +241,24 @@ class ConfigWrapperMeta(type):
 
         # Store the configuration fields to check for default values. This is
         # done to ensure that all non-required fields specified in the
-        # configuration dictionary sources have default values.
+        # configuration dictionary definitions have default values.
         check_for_default: set[str] = set()
 
-        # Collect configuration fields from the dictionary sources
-        for source in sources:
-            # Check if the source is a typed dictionary
-            if not issubclass(source, dict):
+        # Collect configuration fields from the dictionary definitions
+        for definition in definitions:
+            # Check if the definition is a typed dictionary
+            if not issubclass(definition, dict):
                 raise TypeError(
-                    f"A configuration dictionary source must be a subclass "
-                    f"of a typed dictionary. Got: {source}."
+                    f"A configuration dictionary definition must be a "
+                    f"subclass of a typed dictionary. Got: {definition}."
                 )
 
-            # Retrieve annotations and total flag from the dictionary source
-            # to determine whether the configuration fields are required.
-            total = getattr(source, '__total__', False)
+            # Retrieve annotations and total flag from the dictionary
+            # definition to determine whether the configuration fields are
+            # required.
+            total = getattr(definition, '__total__', False)
             annotations: dict[str, Any] = \
-                getattr(source, '__annotations__', {})
+                getattr(definition, '__annotations__', {})
 
             for name, value in annotations.items():
                 # Skip private and dunder attributes
@@ -264,15 +267,16 @@ class ConfigWrapperMeta(type):
                 # Check protected attributes
                 if match_any_pattern(name, *PROTECTED_ATTRS):
                     raise AttributeError(
-                        f"Source configuration field {name!r} conflicts with "
-                        f"a protected member attribute."
+                        f"Definition configuration field {name!r} conflicts"
+                        f"with a protected member attribute."
                     )
                 # Check field shadowing in base classes
                 for base in bases:
                     if hasattr(base, name):
                         warnings.warn(
-                            f"Source configuration field {name!r} shadows an "
-                            f"attribute in base class {base.__qualname__!r}.",
+                            f"Definition configuration field {name!r} shadows "
+                            f"an attribute in base class "
+                            f"{base.__qualname__!r}.",
                             UserWarning,
                         )
 
@@ -295,9 +299,9 @@ class ConfigWrapperMeta(type):
                 if name in fields \
                         and fields[name].annotation != field_info.annotation:
                     raise TypeError(
-                        f"Source configuration field {name!r} must have the "
-                        f"same annotation in all configuration sources. Got: "
-                        f"{fields[name].annotation!r} and "
+                        f"Definition configuration field {name!r} must have "
+                        f"the same annotation in all configuration "
+                        f"definitions. Got: {fields[name].annotation!r} and "
                         f"{field_info.annotation!r}."
                     )
 
@@ -371,8 +375,8 @@ class ConfigWrapperMeta(type):
                     and fields[name].annotation != field_info.annotation:
                 raise TypeError(
                     f"Namespace configuration field {name!r} must have the "
-                    f"same annotation than in all configuration sources. Got: "
-                    f"{fields[name].annotation!r} and "
+                    f"same annotation than in all configuration definitions. "
+                    f"Got: {fields[name].annotation!r} and "
                     f"{field_info.annotation!r}."
                 )
 
@@ -405,7 +409,7 @@ class ConfigWrapperMeta(type):
                 raise ValueError(
                     f"Configuration field {name!r} must have a default value "
                     f"as it is marked as not required in the configuration "
-                    f"dictionary sources."
+                    f"dictionary definitions."
                 )
 
         return fields
@@ -445,6 +449,9 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
     resources, services, and other components in the Plateforme framework.
 
     Attributes:
+        __config_definitions__: A tuple containing the configuration dictionary
+            definitions used to collect the configuration fields for the
+            configuration wrapper class. Defaults to an empty tuple.
         __config_fields__: A dictionary containing the configuration fields
             information for the configuration wrapper class.
         __config_mutable__: A flag indicating whether the configuration
@@ -454,22 +461,19 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
             wrapper class. It is used to retrieve the type hints and
             annotations of the configuration wrapper class.
             Defaults to ``None``.
-        __config_sources__: A tuple containing the configuration dictionary
-            sources used to collect the configuration fields for the
-            configuration wrapper class. Defaults to an empty tuple.
         __config_validators__: A dictionary containing the type validators for
             the configuration fields of the configuration wrapper class.
     """
     if typing.TYPE_CHECKING:
+        __config_definitions__: ClassVar[tuple[ConfigDefinition, ...]]
         __config_fields__: ClassVar[dict[str, ConfigFieldInfo]]
         __config_mutable__: ClassVar[bool]
         __config_parent_namespace__: ClassVar[dict[str, Any] | None]
-        __config_sources__: ClassVar[tuple[ConfigSource, ...]]
         __config_validators__: ClassVar[dict[str, TypeAdapter[Any]]]
     else:
+        __config_definitions__ = ()
         __config_mutable__ = False
         __config_parent_namespace__ = None
-        __config_sources__ = ()
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
         """Create a new configuration instance."""
@@ -484,6 +488,7 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
     def __init__(
         self,
         __owner: Any | None = None,
+        __sources: tuple[Self, ...] | None = None,
         __defaults: dict[str, Any] | None = None,
         __partial_init: bool = False,
         /,
@@ -495,6 +500,8 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
             __owner: The owner of the configuration instance. It can be any
                 object or type that uses the configuration instance.
                 Defaults to ``None``.
+            __sources: The configuration sources to initialize the
+                configuration instance with. Defaults to ``None``.
             __defaults: The default values to initialize the configuration
                 instance with. Defaults to ``None``.
             __partial_init: Flag indicating whether  to partially initialize
@@ -505,6 +512,7 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         # Initialize configuration instance
         self.__config_owner__ = __owner \
             or getattr(self, '__config_owner__', None)
+        self.__config_sources__: tuple[Self, ...] = __sources or ()
         self.__config_defaults__: dict[str, Any] = __defaults or {}
         with self.context(allow_mutation=True):
             self.update(data)
@@ -580,6 +588,7 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
     def create(
         cls,
         owner: Any | None = None,
+        sources: tuple[Self, ...] | None = None,
         defaults: dict[str, Any] | None = None,
         partial_init: bool = False,
         *,
@@ -588,12 +597,14 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         """Create a new configuration instance.
 
         This method is typically used internally to create a new configuration
-        class with a specific owner and partial initialization flag. It is an
-        alternative to the `__init__` method for creating a new configuration
-        instance.
+        class with specific owner, sources, and partial initialization flag. It
+        is an alternative to the `__init__` method for creating a new
+        configuration instance.
 
         Args:
             owner: The owner of the configuration instance.
+            sources: The configuration sources to initialize the configuration
+                instance with. Defaults to ``None``.
             defaults: The default values to initialize the configuration
                 instance with. Defaults to ``None``.
             partial_init: Flag indicating whether to partially initialize the
@@ -604,7 +615,7 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         Returns:
             The new configuration instance created.
         """
-        return cls(owner, defaults, partial_init, **(data or {}))
+        return cls(owner, sources, defaults, partial_init, **(data or {}))
 
     @classmethod
     def from_meta(
@@ -643,20 +654,25 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         """
         with cls.context(allow_mutation=True):
             # Build configuration instance
-            config = cls(owner, {}, True)
+            config = cls(owner, None, None, True)
 
             for base in bases:
-                base_config = getattr(base, config_attr, {})
+                base_config = getattr(base, config_attr, None)
                 if callable(base_config):
                     base_config = base_config()
+                if not base_config:
+                    continue
+                assert isinstance(base_config, cls)
+                config.__config_sources__ += (base_config,)
                 config.merge(base_config)
 
-            namespace_config = namespace.get(config_attr, {})
-            if callable(namespace_config):
-                namespace_config = namespace_config()
-            config.merge(namespace_config)
+            if namespace_config := namespace.get(config_attr, None):
+                if callable(namespace_config):
+                    namespace_config = namespace_config()
+                config.merge(namespace_config)
 
-            config.merge(data or {})
+            if data is not None:
+                config.merge(data)
 
             # Validate configuration instance
             if not partial_init:
@@ -667,6 +683,7 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
     def validate(
         self,
         *,
+        final: bool | None = None,
         strict: bool | None = None,
         context: dict[str, Any] | None = None,
     ) -> None:
@@ -679,12 +696,17 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         of the configuration instance.
 
         Args:
+            final: Whether to perform final validation. When set to ``True``,
+                all fields marked as final will be enforced to their default
+                values if they are not explicitly set.
+                Defaults to ``None``.
             strict: Whether to enforce strict validation. Defaults to ``None``.
             context: The context to use for validation. Defaults to ``None``.
 
         Raises:
-            ValueError: If the configuration instance has undefined values for
-                required fields.
+            ValueError: If the configuration instance has deferred values in
+                strict mode or for enforced final fields, or undefined values
+                for required fields.
             ValidationError: If the assignment of a value is invalid based on
                 the configuration fields information and the current validation
                 context.
@@ -692,25 +714,47 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         # Perform post-initialization
         self.__post_init__()
 
-        # Validate for missing required fields
-        config_missing = [
-            key for key, field in self.__config_fields__.items()
-            if field.is_required() and self[key] is Undefined
-        ]
+        # Validate configuration instance
+        config_missing: list[str] = []
+        config_final: list[tuple[str, Any]] = []
+        config_validation: list[tuple[str, Any]] = []
+        for key, field in self.__config_fields__.items():
+            value = getattr(self, key)
+            has_validator = key in self.__config_validators__
+            is_final = final and field.final
+            is_required = field.is_required()
+            is_set = key in self.__dict__
+            # Handle missing fields for deferred and undefined values
+            if value is Deferred and (is_final or strict):
+                config_missing.append(key)
+            if value is Undefined and is_required:
+                config_missing.append(key)
+            # Skip remaining assignment and validation if any field is missing
+            if config_missing:
+                continue
+            # Handle field assignment for final fields
+            if is_final and not is_set:
+                config_final.append((key, value))
+                is_set = True
+            # Handle field validation
+            if has_validator and is_set:
+                config_validation.append((key, value))
+
         if config_missing:
             raise ValueError(
-                f"Undefined values for configuration "
-                f"{self.__class__.__qualname__!r} required fields: "
+                f"Configuration instance {self.__class__.__qualname__!r} "
+                f"has missing values for the following fields: "
                 f"{', '.join(config_missing)}."
             )
 
-        # Validate assignments
-        for key, value in self.entries(scope='set').items():
-            if not strict and value is Deferred:
-                continue
-            if key in self.__config_validators__:
-                validator = self.__config_validators__[key].validate_python
-                value = validator(value, strict=strict, context=context)
+        # Apply configuration final assignments
+        for key, value in config_final:
+            self.__dict__[key] = value
+
+        # Validate configuration assignments
+        for key, value in config_validation:
+            validator = self.__config_validators__[key].validate_python
+            value = validator(value, strict=strict, context=context)
             self.__dict__[key] = value
 
     @staticmethod
@@ -757,6 +801,7 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         """Return a shallow copy of the configuration dictionary."""
         return self.__class__(
             self.__config_owner__,
+            self.__config_sources__,
             self.__config_defaults__.copy(),
             False,
             **self.entries(scope='set')
@@ -812,37 +857,47 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         key: str,
         *,
         scope: Literal['all', 'default', 'set'] = 'all',
+        origin: Literal['self', 'sources'] = 'self',
         raise_errors: bool = True,
     ) -> bool:
-        """Check if the configuration key exists in the given scope.
+        """Check if the configuration key exists in the given scope and origin.
 
         Args:
             key: The configuration key to check for.
             scope: The scope to check for the configuration key. It can be
                 either ``'all'`` to check in all configuration entries,
-                ``'default'`` to check in configuration entries with default
-                values not undefined, or ``'set'`` to check in only the
+                ``'default'`` to check in configuration entries with no
+                undefined default values, or ``'set'`` to check in only the
                 configuration entries that have been explicitly set.
                 Defaults to ``'all'``.
+            origin: The origin to check for the configuration key. It can be
+                either ``'self'`` to check in the configuration dictionary of
+                the configuration instance, or ``'sources'`` to check in the
+                sources configuration dictionary. Defaults to ``'self'``.
             raise_errors: Flag indicating whether to raise an error if the
                 configuration key is not defined for the configuration wrapper.
                 Defaults to ``True``.
 
         Returns:
             A boolean indicating whether the configuration key exists in the
-            specified scope.
+            specified scope and origin.
         """
-        if key not in self.__config_fields__:
+        if origin == 'sources':
+            wrappers = self.__config_sources__
+        else:
+            wrappers = (self,)  # type: ignore
+
+        if not any(key in wrapper.__config_fields__ for wrapper in wrappers):
             if not raise_errors:
                 return False
             raise KeyError(
                 f"Configuration key {key!r} cannot be checked as it is not "
-                f"defined for wrapper {self.__class__.__qualname__!r}."
+                f"defined in any of the configuration wrappers."
             )
         if scope == 'default':
-            return key not in self.__dict__
+            return not any(key in wrapper.__dict__ for wrapper in wrappers)
         if scope == 'set':
-            return key in self.__dict__
+            return any(key in wrapper.__dict__ for wrapper in wrappers)
         return True
 
     def entries(
@@ -855,11 +910,11 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
         include_metadata: Iterable[Any] | None = None,
         exclude_metadata: Iterable[Any] | None = None,
     ) -> dict[str, Any]:
-        """Return the configuration dictionary.
+        """Get the configuration entries for the given scope.
 
-        It returns the configuration dictionary based on the specified scope,
-        and keys and extra information to filter the configuration dictionary
-        entries.
+        It returns the configuration dictionary based on the specified scope.
+        It can also include or exclude specific keys and metadata information
+        from the configuration dictionary entries.
 
         Args:
             scope: The scope of the configuration dictionary to return. It can
@@ -1211,22 +1266,32 @@ class ConfigWrapper(Representation, metaclass=ConfigWrapperMeta):
                 f"defined for wrapper {self.__class__.__qualname__!r}."
             )
         field = self.__config_fields__[name]
-        # Check if attribute is frozen and mutation is not allowed
+        # Skip silently undefined values as they are equivalent to not setting
+        # the attribute at all.
+        if value is Undefined:
+            return
+        # Handle and prevent direct setting of default placeholder values.
+        if isinstance(value, DefaultPlaceholder):
+            self.__config_defaults__[name] = value
+            return
+        # Handle final attribute where mutation is not allowed once a value is
+        # set for the configuration instance or any of its base configuration
+        # instances.
+        if field.final and name in self.__dict__:
+            raise KeyError(
+                f"Configuration key {name!r} is final and cannot be set for "
+                f"wrapper {self.__class__.__qualname__!r} as it has already "
+                f"been set."
+            )
+        # Handle frozen attribute where mutation is not allowed once the
+        # configuration has been initialized.
         frozen_context = FROZEN_CONTEXT.get()
         if frozen_context and field.frozen:
             raise KeyError(
                 f"Configuration key {name!r} is frozen and cannot be set for "
                 f"wrapper {self.__class__.__qualname__!r}."
             )
-        # Skip silently undefined values as they are equivalent to not setting
-        # the attribute at all.
-        if value is Undefined:
-            return
-        # Set attribute value
-        if isinstance(value, DefaultPlaceholder):
-            self.__config_defaults__[name] = value
-        else:
-            super().__setattr__(name, value)
+        super().__setattr__(name, value)
 
     def __delattr__(self, name: str) -> None:
         # Prevent deletion of attributes
@@ -1511,21 +1576,21 @@ def ConfigDict(
 # MARK: Utilities
 
 def evaluate_config_field(
-    config: ConfigWrapper, /, name: str, *, parents: Any
+    config: ConfigWrapper, /, name: str, *, sources: Any
 ) -> Any:
-    """Evaluate a configuration field from the provided sources.
+    """Evaluate a configuration field from the provided wrapper and sources.
 
     It evaluates the configuration field from the provided configuration
-    sources, which can be any object that has a configuration wrapper or a
-    configuration dictionary. The evaluation is done by taking the first
-    defined value from the sources (non default), where the first parent has
-    the highest precedence.
+    wrapper and configuration sources. The sources can be any configuration
+    wrappers, dictionaries, or objects. Evaluation retrieves the first defined
+    non-default value from the wrapper and sources.
 
     Args:
         name: The name of the field to evaluate.
         config: The configuration object to evaluate the field from.
-        *parents: The parents to evaluate the field from. The first parent
-            has the highest precedence.
+        *sources: The source configurations to evaluate the field from. The
+            sources are evaluated in order from left to right, where the
+            leftmost source has the highest precedence.
 
     Returns:
         The evaluated configuration field.
@@ -1536,11 +1601,13 @@ def evaluate_config_field(
             f"configuration wrapper {config.__class__.__qualname__!r}."
         )
     values = [config.get(name, default_mode='wrap')]
-    for parent in parents:
-        if isinstance(parent, ConfigWrapper):
-            values.append(parent.get(name, default_mode='wrap'))
+    for source in sources:
+        if isinstance(source, ConfigWrapper):
+            values.append(source.get(name, default_mode='wrap'))
+        elif isinstance(source, dict):
+            values.append(source.get(name, Default()))
         else:
-            values.append(getattr(parent, name, Default()))
+            values.append(getattr(source, name, Default()))
     return get_value_or_default(*values)
 
 

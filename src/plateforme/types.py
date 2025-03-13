@@ -13,7 +13,6 @@ core types package that provides a clean and simple interface for developers to
 interact with the framework's types features.
 """
 
-# Base
 from .core.types.base import BaseType, BaseTypeFactory
 from .core.types.binaries import Binary, BinaryFactory, StrictBinary
 from .core.types.datetimes import (
@@ -104,11 +103,13 @@ from .core.types.numbers import (
     StrictInteger,
 )
 from .core.types.paths import AnyPath, DirectoryPath, FilePath, NewPath
-from .core.types.secrets import Secret, SecretBytes, SecretStr
+from .core.types.secrets import Secret, SecretBytes, SecretInt, SecretStr
 from .core.types.strings import StrictString, String, StringFactory
 from .core.types.uuid import UUID, UUID1, UUID3, UUID4, UUID5, UuidFactory
+from .core.typing import Deferred
 
 __all__ = (
+    'Deferred',
     # Base
     'BaseType',
     'BaseTypeFactory',
@@ -212,6 +213,7 @@ __all__ = (
     # Secrets
     'Secret',
     'SecretBytes',
+    'SecretInt',
     'SecretStr',
     # Strings
     'StrictString',

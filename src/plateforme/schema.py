@@ -40,6 +40,7 @@ from .core.schema.json import (
     JsonSchemaSource,
     JsonSchemaValue,
 )
+from .core.schema.loaders import Loader
 from .core.schema.models import (
     BaseModel,
     DiscriminatedModel,
@@ -84,6 +85,8 @@ __all__ = (
     'Field',
     'PrivateAttr',
     'computed_field',
+    # Loaders
+    'Loader',
     # JSON
     'GenerateJsonSchema',
     'JsonEncoder',

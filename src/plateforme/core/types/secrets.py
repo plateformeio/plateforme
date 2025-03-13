@@ -17,6 +17,7 @@ from typing import Any, ClassVar, Generic, Self, TypeVar
 from ..database.types import (
     BaseTypeEngine,
     BinaryEngine,
+    IntegerEngine,
     JsonEngine,
     StringEngine,
 )
@@ -38,6 +39,7 @@ __all__ = (
     'BaseSecret',
     'Secret',
     'SecretBytes',
+    'SecretInt',
     'SecretStr',
 )
 
@@ -68,8 +70,8 @@ class BaseSecret(BaseType, Generic[_T]):
         if cls is BaseSecret:
             raise TypeError(
                 "Plateforme base secret cannot be directly instantiated. Use "
-                "either Secret[<type>], SecretStr, SecretBytes, or subclass "
-                "from Secret[<type>] instead."
+                "either Secret[<type>], SecretBytes, SecretInt, SecretStr, or "
+                "subclass from Secret[<type>] instead."
             )
         return super().__new__(cls)
 
@@ -199,7 +201,7 @@ class Secret(BaseSecret[_T]):
 
         >>> class User(BaseModel):
         ...     username: str
-        ...     password: Secret[int]
+        ...     password: Secret[str]
         ... user = User(username='johndoe', password='123')
 
         >>> print(user)
@@ -239,6 +241,96 @@ class Secret(BaseSecret[_T]):
         )
 
 
+class SecretBytes(BaseSecret[bytes]):
+    """A secret bytes type.
+
+    It is used for storing sensitive information that you do not want to be
+    visible in logging or tracebacks. When the secret value is nonempty, it is
+    displayed as ``b'**********'`` instead of the underlying value in calls to
+    `repr()` and `str()`. If the value is empty, it is displayed as ``b''``.
+
+    Examples:
+        >>> from plateforme import BaseModel
+        ... from plateforme.types import SecretBytes
+
+        >>> class Generator(BaseModel):
+        ...     salt: SecretBytes
+        ... generator = Generator(salt=b'123')
+
+        >>> print(generator)
+        salt=SecretBytes(b'**********')
+
+        >>> print(generator.salt.get_secret_value())
+        b'123'
+
+        >>> print([SecretBytes(b'123'), SecretBytes(b'')])
+        [SecretBytes(b'**********'), SecretBytes(b'')]
+    """
+
+    _schema = core_schema.bytes_schema()
+    _schema_type = 'bytes_type'
+
+    def _display(self) -> bytes:
+        """Display the secret value."""
+        return _secret_display(self.get_secret_value()).encode()
+
+    @classmethod
+    def __get_sqlalchemy_data_type__(cls, **kwargs: Any) -> BinaryEngine:
+        return BinaryEngine(
+            length=kwargs.get('max_length', None),
+            processors={
+                'before': lambda v, _: v.get_secret_value() if v else None,
+                'after': lambda v, _: cls(v) if v else None,
+            },
+        )
+
+    def __len__(self) -> int:
+        return len(self._value)
+
+
+class SecretInt(BaseSecret[int]):
+    """A secret integer type.
+
+    It is used for storing sensitive information that you do not want to be
+    visible in logging or tracebacks. When the secret value is nonempty, it is
+    displayed as ``'**********'`` instead of the underlying value in calls to
+    `repr()` and `str()`. If the value is empty, it is displayed as ``''``.
+
+    Examples:
+        >>> from plateforme import BaseModel
+        ... from plateforme.types import SecretInt
+
+        >>> class Generator(BaseModel):
+        ...     salt: SecretInt
+        ... generator = Generator(salt=123)
+
+        >>> print(generator)
+        salt=SecretInt('**********')
+
+        >>> print(generator.salt.get_secret_value())
+        123
+
+        >>> print([SecretInt(123), SecretInt('')])
+        [SecretInt('**********'), SecretInt('')]
+    """
+
+    _schema = core_schema.int_schema()
+    _schema_type = 'int_type'
+
+    def _display(self) -> str:
+        """Display the secret value."""
+        return _secret_display(self.get_secret_value())
+
+    @classmethod
+    def __get_sqlalchemy_data_type__(cls, **kwargs: Any) -> IntegerEngine:
+        return IntegerEngine(
+            processors={
+                'before': lambda v, _: v.get_secret_value() if v else None,
+                'after': lambda v, _: cls(v) if v else None,
+            },
+        )
+
+
 class SecretStr(BaseSecret[str]):
     """A secret string type.
 
@@ -254,22 +346,23 @@ class SecretStr(BaseSecret[str]):
         >>> class User(BaseModel):
         ...     username: str
         ...     password: SecretStr
-        ... user = User(username='johndoe', password='kLj4$2')
+        ... user = User(username='johndoe', password='123')
 
         >>> print(user)
         username='johndoe' password=SecretStr('**********')
 
         >>> print(user.password.get_secret_value())
-        kLj4$2
+        123
 
-        >>> print((SecretStr('password'), SecretStr('')))
-        (SecretStr('**********'), SecretStr(''))
+        >>> print([SecretStr('123'), SecretStr('')])
+        [SecretStr('**********'), SecretStr('')]
     """
 
     _schema = core_schema.str_schema()
     _schema_type = 'string_type'
 
     def _display(self) -> str:
+        """Display the secret value."""
         return _secret_display(self.get_secret_value())
 
     @classmethod
@@ -277,54 +370,6 @@ class SecretStr(BaseSecret[str]):
         return StringEngine(
             length=kwargs.get('max_length', None),
             collation=kwargs.get('data_collation', None),
-            processors={
-                'before': lambda v, _: v.get_secret_value() if v else None,
-                'after': lambda v, _: cls(v) if v else None,
-            },
-        )
-
-    def __len__(self) -> int:
-        return len(self._value)
-
-
-class SecretBytes(BaseSecret[bytes]):
-    """A secret bytes type.
-
-    It is used for storing sensitive information that you do not want to be
-    visible in logging or tracebacks. When the secret value is nonempty, it is
-    displayed as ``b'**********'`` instead of the underlying value in calls to
-    `repr()` and `str()`. If the value is empty, it is displayed as ``b''``.
-
-    Examples:
-        >>> from plateforme import BaseModel
-        ... from plateforme.types import SecretBytes
-
-        >>> class User(BaseModel):
-        ...     username: str
-        ...     password: SecretBytes
-        ... user = User(username='johndoe', password=b'kLj4$2')
-
-        >>> print(user)
-        username='johndoe' password=SecretBytes(b'**********')
-
-        >>> print(user.password.get_secret_value())
-        b'kLj4$2'
-
-        >>> print((SecretBytes(b'password'), SecretBytes(b'')))
-        (SecretBytes(b'**********'), SecretBytes(b''))
-    """
-
-    _schema = core_schema.bytes_schema()
-    _schema_type = 'bytes_type'
-
-    def _display(self) -> bytes:
-        """Display the secret value."""
-        return _secret_display(self.get_secret_value()).encode()
-
-    @classmethod
-    def __get_sqlalchemy_data_type__(cls, **kwargs: Any) -> BinaryEngine:
-        return BinaryEngine(
-            length=kwargs.get('max_length', None),
             processors={
                 'before': lambda v, _: v.get_secret_value() if v else None,
                 'after': lambda v, _: cls(v) if v else None,

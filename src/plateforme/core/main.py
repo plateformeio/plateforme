@@ -12,17 +12,16 @@ This module contains the Plateforme application.
 import inspect
 import os
 import typing
-from collections.abc import Iterable
 from contextvars import Token
-from typing import Any, Callable, Generic, Literal, Self, TypeVar, Unpack
+from typing import Any, Literal, Self, TypeVar, Unpack
 from weakref import WeakValueDictionary
 
 from . import runtime
 from .api.base import APIManager
 from .api.exceptions import EXCEPTION_HANDLERS
-from .api.middleware import BulkMiddleware, Middleware
+from .api.middleware import Middleware
 from .api.routing import APIBaseRouterConfigDict
-from .api.types import Receive, Scope, Send
+from .api.types import ASGIApp, Receive, Scope, Send
 from .api.utils import sort_key_for_routes
 from .context import PLATEFORME_CONTEXT
 from .database.base import DatabaseManager
@@ -33,6 +32,7 @@ from .database.sessions import (
     AsyncSessionFactory,
     SessionFactory,
     async_session_factory,
+    async_session_manager,
     session_factory,
 )
 from .errors import PlateformeError
@@ -70,11 +70,13 @@ _T = TypeVar('_T', bound=Any)
 
 __all__ = (
     'CALLER_REF',
+    'AppMiddleware',
     'AppProxy',
     'MetaDataProxy',
     'RegistryProxy',
     'Plateforme',
     'PlateformeMeta',
+    'get_current_app',
 )
 
 
@@ -82,45 +84,77 @@ CALLER_REF = '$'
 """A special reference to the caller package name."""
 
 
-# MARK: Plateforme Proxies
+# MARK: Plateforme Middleware
 
-class AppProxy(CollectionProxy[_T], Generic[_T]):
-    """An application proxy.
-
-    It delegates attribute access to a target object or callable. This class is
-    used internally to proxy the Plateforme application metadata and registry.
-
-    Attributes:
-        app: The application instance.
-    """
-    if typing.TYPE_CHECKING:
-        app: 'Plateforme'
-
-    __config__ = ProxyConfig(read_only=True)
+class AppMiddleware:
+    """The application middleware for managing operations on resources."""
 
     def __init__(
         self,
-        app: 'Plateforme',
-        target: Iterable[_T] | Callable[..., Iterable[_T]],
+        app: ASGIApp,
+        on_exit: Literal['commit', 'flush', 'rollback'] | None = None
     ) -> None:
+        self.app = app
+        self.on_exit = on_exit
+
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        if scope['type'] not in ['http', 'websocket']:
+            await self.app(scope, receive, send)
+            return
+
+        async with async_session_manager(
+            new=True, on_exit=self.on_exit
+        ) as session:
+            async with session.bulk():
+                await self.app(scope, receive, send)
+
+
+# MARK: Plateforme Proxies
+
+class AppProxy(CollectionProxy[_T]):
+    """An application proxy.
+
+    It delegates attribute access to a target proxied iterable object. This
+    class is used internally to proxy the Plateforme application metadata and
+    registry.
+
+    Attributes:
+        __proxy_app__: The application instance.
+        __proxy_attr__: The target attribute name to proxy.
+    """
+    if typing.TYPE_CHECKING:
+        __proxy_app__: 'Plateforme'
+        __proxy_attr__: str
+
+    __config__ = ProxyConfig(read_only=True)
+
+    def __init__(self, app: 'Plateforme', attr: str) -> None:
         """Initialize an application proxy instance.
 
         Args:
             app: The application instance.
-            target: The target object or callable to proxy to. If the target is
-                a callable, it will be called to retrieve the actual target
-                object. The target object can be any iterable type.
+            attr: The target attribute name to proxy.
         """
-        object.__setattr__(self, 'app', app)
-        super().__init__(target)
+        super().__init__()
+        object.__setattr__(self, '__proxy_app__', app)
+        object.__setattr__(self, '__proxy_attr__', attr)
+
+    def __proxy__(self) -> list[_T]:
+        """Get the proxy target iterable object."""
+        return [
+            getattr(package, self.__proxy_attr__)
+            for package in self.__proxy_app__.packages.values()
+        ]
 
     def __repr__(self) -> str:
         name = self.__class__.__name__
-        return f'{name}({self.app})'
+        return f'{name}({self.__proxy_app__})'
 
     def __str__(self) -> str:
         name = self.__class__.__name__
-        return f'{name}({self.app})'
+        return f'{name}({self.__proxy_app__})'
 
 
 class MetaDataProxy(AppProxy[MetaData]):
@@ -144,13 +178,13 @@ class MetaDataProxy(AppProxy[MetaData]):
                 present in the target database. Defaults to ``True`.
         """
         # Check if the engine is registered
-        if bind not in self.app.database:
+        if bind not in self.__proxy_app__.database:
             raise PlateformeError(
                 f"Cannot create all tables. The engine {bind!r} is not "
                 f"registered.",
                 code='plateforme-invalid-engine',
             )
-        engine = self.app.database.engines[bind]
+        engine = self.__proxy_app__.database.engines[bind]
         # Call proxy methods for create all
         create_all = super().__proxy_getattr__('create_all')
         if callable(create_all):
@@ -174,13 +208,13 @@ class MetaDataProxy(AppProxy[MetaData]):
                 be present in the target database.
         """
         # Check if the engine is registered
-        if bind not in self.app.database:
+        if bind not in self.__proxy_app__.database:
             raise PlateformeError(
                 f"Cannot drop all tables. The engine {bind!r} is not "
                 f"registered.",
                 code='plateforme-invalid-engine',
             )
-        engine = self.app.database.engines[bind]
+        engine = self.__proxy_app__.database.engines[bind]
         # Call proxy methods for drop all
         drop_all = super().__proxy_getattr__('drop_all')
         if callable(drop_all):
@@ -369,12 +403,8 @@ class Plateforme(EventEmitter, metaclass=PlateformeMeta):
         # Initialize namespaces and packages
         object.__setattr__(self, 'namespaces', WeakValueDictionary())
         object.__setattr__(self, 'packages', WeakValueDictionary())
-        object.__setattr__(self, 'metadata', MetaDataProxy(
-            self, lambda: [p.metadata for p in self.packages.values()]
-        ))
-        object.__setattr__(self, 'registry', RegistryProxy(
-            self, lambda: [p.registry for p in self.packages.values()]
-        ))
+        object.__setattr__(self, 'metadata', MetaDataProxy(self, 'metadata'))
+        object.__setattr__(self, 'registry', RegistryProxy(self, 'registry'))
 
         # Initialize sessions and database
         routers: list[DatabaseRouter] = []
@@ -624,8 +654,7 @@ class Plateforme(EventEmitter, metaclass=PlateformeMeta):
                     self.caller
                 )
                 caller_settings = PackageSettings(
-                    api_resources=[caller_path],
-                    api_services=[caller_path],
+                    resources=[caller_path], services=[caller_path]
                 )
                 name = self.caller_package.name
                 package = self.caller_package
@@ -809,7 +838,7 @@ class Plateforme(EventEmitter, metaclass=PlateformeMeta):
 
         # Update API middleware
         self.settings.api.middleware = [
-            Middleware(BulkMiddleware),
+            Middleware(AppMiddleware),
             *(self.settings.api.middleware or []),
         ]
 
@@ -1311,3 +1340,16 @@ class Plateforme(EventEmitter, metaclass=PlateformeMeta):
 
     def __str__(self) -> str:
         return to_kebab_case(self.settings.title)
+
+
+# MARK: Context
+
+def get_current_app() -> Plateforme:
+    app = PLATEFORME_CONTEXT.get()
+    if app is None:
+        raise PlateformeError(
+            "No Plateforme application is currently active within the "
+            "current context.",
+            code='plateforme-invalid-application',
+        )
+    return app

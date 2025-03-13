@@ -172,6 +172,6 @@ def version_patch() -> str:
 class URL(StrEnum):
     """An enumeration of URLs used within the Plateforme framework."""
 
-    DOCS = f'https://docs.plateforme.io/{version_minor()}/'
-    ERRORS = f'https://docs.plateforme.io/{version_minor()}/errors/'
+    DOCS = f'https://docs.plateforme.io/{version_minor()}'
+    ERRORS = f'https://docs.plateforme.io/{version_minor()}/errors'
     FAVICON = 'https://docs.plateforme.io/favicon.png'

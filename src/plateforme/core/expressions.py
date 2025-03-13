@@ -221,7 +221,7 @@ else:
                             schema[arg_key] = arg_value
                         else:
                             schema[arg_key] = cls.from_args(arg_value)
-                elif isinstance(arg, (list, set, tuple)):
+                elif isinstance(arg, (list, tuple, set)):
                     validate_schema_type(*arg)
                     if isinstance(schema, dict):
                         schema.update({key: True for key in arg})
@@ -910,7 +910,7 @@ class Sort(SortList):
     @classmethod
     def validate(cls, obj: Any) -> Self:
         """Validate the sort criteria from the given object."""
-        if isinstance(obj, (list, set, tuple)):
+        if isinstance(obj, (list, tuple, set)):
             return cls(*obj)
         elif isinstance(obj, str):
             return cls(*cls.parse_criteria(obj))

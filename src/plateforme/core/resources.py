@@ -143,7 +143,6 @@ from .schema.models import (
     DiscriminatedModel,
     DiscriminatedModelType,
     ModelConfig,
-    ModelFieldInfo,
     ModelMeta,
     ModelType,
     NoInitField,
@@ -169,6 +168,7 @@ from .services import (
 from .specs import (
     BaseSpec,
     CRUDSpec,
+    Identity,
     SpecType,
     apply_spec,
     resolve_schema_model,
@@ -274,46 +274,55 @@ class ResourceIndex(TypedDict, total=False):
 class ResourceConfigDict(BaseModelConfigDict, total=False):
     """A resource class configuration dictionary."""
 
+    protected: bool
+    """Whether the resource is protected. Protected resources are not exposed
+    through the nested resource API routes. Only the declared routes within the
+    resource are accessible. Defaults to ``False``."""
+
     tags: list[str | Enum] | None
     """A list of tags to associate with the resource. Tags are used to group
     resources and provide additional metadata. It will be added to the
     generated OpenAPI, visible at `/docs`. If not provided, the resource slug
     will be used as the default tag. Defaults to ``None``."""
 
-    api_max_depth: int
-    """The maximum depth to walk through the resource path to collect manager
-    methods from resource dependencies. It is used to generate API routes.
-    Defaults to ``2``."""
-
-    api_max_selection: int
-    """The limit of resources to return for the API route selections. It is
-    used when generating the API routes for resources within the application
-    to avoid too many resources being returned. Defaults to ``20``.
-    """
-
-    auto_commit: bool
-    """Whether to automatically commit the session after the resource method
-    execution. It is used to manage the session commit behavior for the
-    resource methods. Defaults to ``False``."""
-
-    id_strategy: Literal['auto', 'manual', 'hybrid']
-    """The identifier strategy to use for the resource. It defines how the
-    identifier is generated for the resource and can be set to one of the
-    following values:
-    - ``auto``: Enforce automatic generation of the resource identifier.
-    - ``manual``: Enforce manual specification of the resource identifier.
-    - ``hybrid``: Allow both automatic and manual generation of the resource
-        identifier.
-    Defaults to ``auto``.
-    """
-
-    id_type: Literal['integer', 'uuid']
+    id_type: Literal['integer', 'string', 'uuid'] | None
     """The identifier type to use for the resource. It defines the data type of
-    the resource identifier and can be set to one of the following values:
-    - ``integer``: Use an integer data type engine for the resource identifier.
-    - ``uuid``: Use a UUID data type engine for the resource identifier.
-    Defaults to ``integer``.
+    the resource identifier. Either this configuration can be used or the `id`
+    field can be redeclared directly in the resource class, but not both.
+    Using both methods simultaneously will raise an error. The identifier type
+    can be set to one of the following values:
+    - ``'integer'``: Use an integer data type engine for the resource
+        identifier.
+    - ``'string'``: Use a string data type engine for the resource identifier.
+    - ``'uuid'``: Use a UUID data type engine for the resource identifier.
+    Inferred from the `id` field when it is shadowed or redeclared in the
+    resource class. Otherwise, the default type resolves to ``'integer'`` with
+    an autoincrement strategy.
     """
+
+    id_strategy: Literal['auto', 'manual', 'hybrid'] | None
+    """The identifier strategy to use for the resource. It defines how the
+    identifier is generated for the resource. Either this configuration can be
+    used or the `id` field can be redeclared directly in the resource class to
+    implement custom behavior, but not both. Using both methods simultaneously
+    will raise an error. The identifier strategy can be set to one of the
+    following values:
+    - ``'auto'``: Enforce automatic generation of the resource identifier.
+    - ``'manual'``: Enforce manual specification of the resource identifier.
+    - ``'hybrid'``: Allow both automatic and manual generation of the resource
+        identifier.
+    Inferred from the `id` field when it is shadowed or redeclared in the
+    resource class. Otherwise, the default strategy resolves to ``'auto'``.
+    """
+
+    indexes: Sequence[ResourceIndex | set[str]]
+    """A sequence or list of resource indexes configurations that define
+    indexing for resource model fields. An index is defined either as a set of
+    field aliases or as a dictionary with the following keys:
+    - ``'aliases'``: A tuple of strings representing the resource field aliases
+        to include in the index.
+    - ``'unique'``: Whether the index is unique. Defaults to ``True``.
+    Defaults to an empty sequence."""
 
     mapper_args: dict[str, Any]
     """A dictionary of additional arguments to pass to the resource declarative
@@ -334,14 +343,21 @@ class ResourceConfigDict(BaseModelConfigDict, total=False):
         performance for large and complex hierarchies.
     """
 
-    indexes: Sequence[ResourceIndex | set[str]]
-    """A sequence or list of resource indexes configurations that define
-    indexing for resource model fields. An index is defined either as a set of
-    field aliases or as a dictionary with the following keys:
-    - ``aliases``: A tuple of strings representing the resource field aliases
-        to include in the index.
-    - ``unique``: Whether the index is unique. Defaults to ``True``.
-    Defaults to an empty sequence."""
+    auto_commit: bool
+    """Whether to automatically commit the session after the resource method
+    execution. It is used to manage the session commit behavior for the
+    resource methods. Defaults to ``False``."""
+
+    api_max_depth: int
+    """The maximum depth to walk through the resource path to collect manager
+    methods from resource dependencies. It is used to generate API routes.
+    Defaults to ``2``."""
+
+    api_max_selection: int
+    """The limit of resources to return for the API route selections. It is
+    used when generating the API routes for resources within the application
+    to avoid too many resources being returned. Defaults to ``20``.
+    """
 
     endpoints: Sequence[
         tuple[list[str] | set[str] | str | None,  BaseServiceConfigDict]
@@ -386,16 +402,20 @@ class ResourceConfig(ModelConfig):
     field that is typically used with `check_config` to validate an object type
     without using `isinstance` in order to avoid circular imports."""
 
-    extra: Annotated[
-        Literal['allow', 'ignore', 'forbid'], 'pydantic'
-    ] = ConfigField(default='forbid', frozen=True, init=False)
+    extra: Annotated[Literal['allow', 'ignore', 'forbid'], 'pydantic'] = \
+        ConfigField(default='forbid', frozen=True, init=False)
     """Extra values are not allowed within a resource instance. This attribute
-    is protected and will initialize to its default value ``forbid``."""
+    is protected and will initialize to its default value ``'forbid'``."""
 
     defer_build: Annotated[bool, 'pydantic'] = \
         ConfigField(default=True, frozen=True, init=False)
     """Defer building is not allowed for resource instances. This attribute is
     protected and will initialize to its default value ``True``."""
+
+    protected: bool = ConfigField(default=False, final=True)
+    """Whether the resource is protected. Protected resources are not exposed
+    through the nested resource API routes. Only the declared routes within the
+    resource are accessible. Defaults to ``False``."""
 
     tags: list[str | Enum] | None = None
     """A list of tags to associate with the resource. Tags are used to group
@@ -403,39 +423,46 @@ class ResourceConfig(ModelConfig):
     generated OpenAPI, visible at `/docs`. If not provided, the resource slug
     will be used as the default tag. Defaults to ``None``."""
 
-    api_max_depth: int = 2
-    """The maximum depth to walk through the resource path to collect manager
-    methods from resource dependencies. It is used to generate API routes.
-    Defaults to ``2``."""
-
-    api_max_selection: int = 20
-    """The limit of resources to return for the API route selections. It is
-    used when generating the API routes for resources within the application
-    to avoid too many resources being returned. Defaults to ``20``.
-    """
-
-    auto_commit: bool = False
-    """Whether to automatically commit the session after the resource method
-    execution. It is used to manage the session commit behavior for the
-    resource methods. Defaults to ``False``."""
-
-    id_strategy: Literal['auto', 'manual', 'hybrid'] = 'auto'
-    """The identifier strategy to use for the resource. It defines how the
-    identifier is generated for the resource and can be set to one of the
-    following values:
-    - ``auto``: Enforce automatic generation of the resource identifier.
-    - ``manual``: Enforce manual specification of the resource identifier.
-    - ``hybrid``: Allow both automatic and manual generation of the resource
-        identifier.
-    Defaults to ``auto``.
-    """
-
-    id_type: Literal['integer', 'uuid'] = 'integer'
+    id_type: Literal['integer', 'string', 'uuid'] = \
+        ConfigField(default=Deferred, final=True)
     """The identifier type to use for the resource. It defines the data type of
-    the resource identifier and can be set to one of the following values:
-    - ``integer``: Use an integer data type engine for the resource identifier.
-    - ``uuid``: Use a UUID data type engine for the resource identifier.
-    Defaults to ``integer``.
+    the resource identifier. Either this configuration can be used or the `id`
+    field can be redeclared directly in the resource class, but not both.
+    Using both methods simultaneously will raise an error. The identifier type
+    can be set to one of the following values:
+    - ``'integer'``: Use an integer data type engine for the resource
+        identifier.
+    - ``'string'``: Use a string data type engine for the resource identifier.
+    - ``'uuid'``: Use a UUID data type engine for the resource identifier.
+    Inferred from the `id` field when it is shadowed or redeclared in the
+    resource class. Otherwise, the default type resolves to ``'integer'`` with
+    an autoincrement strategy.
+    """
+
+    id_strategy: Literal['auto', 'manual', 'hybrid'] = \
+        ConfigField(default=Deferred, final=True)
+    """The identifier strategy to use for the resource. It defines how the
+    identifier is generated for the resource. Either this configuration can be
+    used or the `id` field can be redeclared directly in the resource class to
+    implement custom behavior, but not both. Using both methods simultaneously
+    will raise an error. The identifier strategy can be set to one of the
+    following values:
+    - ``'auto'``: Enforce automatic generation of the resource identifier.
+    - ``'manual'``: Enforce manual specification of the resource identifier.
+    - ``'hybrid'``: Allow both automatic and manual generation of the resource
+        identifier.
+    Inferred from the `id` field when it is shadowed or redeclared in the
+    resource class. Otherwise, the default strategy resolves to ``'auto'``.
+    """
+
+    indexes: tuple[ResourceIndex, ...] = ()
+    """A tuple of resource indexes configurations that define indexing for
+    resource model fields. An index is defined as a dictionary with the
+    following keys:
+    - ``'aliases'``: A tuple of strings representing the resource field aliases
+        to include in the index.
+    - ``'unique'``: Whether the index is unique. Defaults to ``True``.
+    Defaults to an empty tuple.
     """
 
     mapper_args: dict[str, Any] = {}
@@ -444,7 +471,7 @@ class ResourceConfig(ModelConfig):
     to add to the ``__mapper_args__`` attribute of the resource class.
     Defaults to an empty dictionary."""
 
-    use_single_table_inheritance: bool = False
+    use_single_table_inheritance: bool = ConfigField(default=False, final=True)
     """It defines the inheritance design pattern to use for database ORM.
     Defaults to ``False``, using joined table inheritance with separate tables
     for parent and child classes linked by a foreign key. This approach is
@@ -457,14 +484,20 @@ class ResourceConfig(ModelConfig):
         performance for large and complex hierarchies.
     """
 
-    indexes: tuple[ResourceIndex, ...] = ()
-    """A tuple of resource indexes configurations that define indexing for
-    resource model fields. An index is defined as a dictionary with the
-    following keys:
-    - ``aliases``: A tuple of strings representing the resource field aliases
-        to include in the index.
-    - ``unique``: Whether the index is unique. Defaults to ``True``.
-    Defaults to an empty tuple.
+    auto_commit: bool = False
+    """Whether to automatically commit the session after the resource method
+    execution. It is used to manage the session commit behavior for the
+    resource methods. Defaults to ``False``."""
+
+    api_max_depth: int = 2
+    """The maximum depth to walk through the resource path to collect manager
+    methods from resource dependencies. It is used to generate API routes.
+    Defaults to ``2``."""
+
+    api_max_selection: int = 20
+    """The limit of resources to return for the API route selections. It is
+    used when generating the API routes for resources within the application
+    to avoid too many resources being returned. Defaults to ``20``.
     """
 
     endpoints: Sequence[
@@ -509,11 +542,22 @@ class ResourceConfig(ModelConfig):
         return 'auto'
 
     @property
-    def id_engine(self) -> type[IntegerEngine | UuidEngine[UUID4]]:
+    def id_engine(self) -> type[
+        IntegerEngine | StringEngine | UuidEngine[UUID4]
+    ]:
         """The identifier engine to use for the resource."""
+        if self.id_type == 'integer':
+            return IntegerEngine
+        if self.id_type == 'string':
+            return StringEngine
         if self.id_type == 'uuid':
             return UuidEngine[UUID4]
-        return IntegerEngine
+        raise PlateformeError(
+            f"The resource {self.__config_owner__.__qualname__!r} has an "
+            f"invalid identifier type {self.id_type!r}. The identifier type "
+            f"must be one of 'integer', 'string', or 'uuid'.",
+            code='resource-invalid-config',
+        )
 
     def get_service_overrides(
         self, name: str | None = None
@@ -546,12 +590,11 @@ class ResourceConfig(ModelConfig):
         # Model post-initialization
         super().__post_init__()
 
-        # Resource post-initialization
+        # Collect configuration indexes
         fields = resource.resource_fields
         aliases = [field.alias for field in fields.values()]
         indexes: list[ResourceIndex] = []
 
-        # Collect configuration indexes
         for index in self.indexes:
             # Validate index type
             if isinstance(index, (list, set)):
@@ -614,8 +657,7 @@ class ResourceConfig(ModelConfig):
             indexes_check.add(index_check)
 
         # Update indexes
-        if indexes:
-            self.indexes = tuple(indexes)
+        self.indexes = tuple(indexes)
 
 
 # MARK: Resource Dictionary
@@ -1081,6 +1123,10 @@ class ResourcePath(Iterable[ResourceNode['BaseResource']]):
             # Skip non-linked fields
             if not field.linked:
                 continue
+            assert isinstance(field.target, type)
+            # Skip protected target fields
+            if field.target.resource_config.protected:
+                continue
             # Skip non-backref fields
             if field.rel_backref is None:
                 continue
@@ -1088,10 +1134,7 @@ class ResourcePath(Iterable[ResourceNode['BaseResource']]):
             if field.is_eagerly() is not True:
                 continue
             # Get the resource path object
-            obj = self.goto(
-                field.alias,
-                in_place=False,
-            )
+            obj = self.goto(field.alias, in_place=False)
             # Yield the resource path and walk its sub-paths
             yield obj
             yield from obj.walk(
@@ -1858,6 +1901,7 @@ def _create_base_model(
     model_name = 'Model'
     model_qualname = f'{cls.__qualname__}.Model'
 
+    # Retrieve model bases
     model_bases: tuple[ModelType, ...] = ()
     for base in bases:
         model_base = getattr(base, 'Model', None)
@@ -1865,6 +1909,13 @@ def _create_base_model(
             model_bases += (model_base,)
     if not model_bases:
         model_bases = (BaseModel,)
+
+    # Collect identity and type definitions
+    if not isbaseclass_lenient(cls, 'BaseResource'):
+        id_definition = _extract_base_identity_definition(fields_namespace)
+        type_definition = _extract_base_type_definition(fields_namespace)
+    else:
+        id_definition = type_definition = None
 
     model_namespace: dict[str, Any] = {
         **fields_namespace,
@@ -1893,11 +1944,12 @@ def _create_base_model(
     # Set resource model
     setattr(cls, 'Model', model)
 
-    # Validate resource configuration and initialize identity and type
-    cls.resource_config.validate()
+    # Update identity and type definitions
+    _update_base_identity_definition(cls, id_definition)
+    _update_base_type_definition(cls, type_definition)
 
-    if not is_abstract(cls):
-        _update_base_identity_and_type(cls)
+    # Validate resource configuration
+    cls.resource_config.validate(final=not is_abstract(cls))
 
 
 def _init_base_model(cls: 'ResourceMeta', /) -> None:
@@ -1926,6 +1978,102 @@ def _build_base_model(cls: 'ResourceMeta', /) -> None:
 
 
 # MARK:> Utilities
+
+def _apply_base_identity_configuration(cls: 'ResourceMeta') -> None:
+    """Apply the configuration for the identity field."""
+    config = cls.resource_config
+    field_info = cls.resource_fields['id']
+
+    # Set default identity field configuration
+    if config.id_type is Deferred:
+        config.id_type = 'integer'
+    if config.id_strategy is Deferred:
+        config.id_strategy = 'auto'
+
+    # Update identity field information
+    if config.id_type == 'integer':
+        field_info._update(annotation=int)
+    elif config.id_type == 'string':
+        field_info._update(annotation=str)
+    elif config.id_type == 'uuid':
+        field_info._update(annotation=UUID4)
+
+
+def _apply_base_identity_shadowing(
+    cls: 'ResourceMeta', /, field_definition: FieldDefinition
+) -> None:
+    """Apply the shadowing field definition for the identity field."""
+    config = cls.resource_config
+    field_info = cls.resource_fields['id']
+    field_annotation, field_update = field_definition
+
+    # Update identity field information
+    field_info._update(annotation=field_annotation)
+    if field_update is not None:
+        field_info._update(**field_update._attributes_set)
+
+    # Resolve identity field type
+    if issubclass(field_annotation, int):
+        config.id_type = 'integer'
+    elif issubclass(field_annotation, str):
+        config.id_type = 'string'
+    elif issubclass(field_annotation, uuid.UUID):
+        config.id_type = 'uuid'
+
+    # Resolve identity field strategy
+    if field_info.is_required():
+        config.id_strategy = 'manual'
+    elif field_info.init:
+        config.id_strategy = 'hybrid'
+    else:
+        config.id_strategy = 'auto'
+
+
+def _configure_base_identity_strategy(cls: 'ResourceMeta') -> None:
+    """Configure the strategy for the identity field."""
+    config = cls.resource_config
+    field_info = cls.resource_fields['id']
+
+    # Validate identity field configuration
+    assert config.id_type in ('integer', 'string', 'uuid'), \
+        f"Invalid resource identity type. Got: {config.id_type!r}."
+    assert config.id_strategy in ('auto', 'manual', 'hybrid'), \
+        f"Invalid resource identity strategy. Got: {config.id_strategy!r}."
+
+    # Handle identity field auto strategy setup
+    if config.id_strategy == 'auto':
+        if config.id_type == 'integer':
+            field_info._default(init=False)
+        elif config.id_type == 'string':
+            field_info._default(
+                default=Undefined,
+                default_factory=lambda: str(uuid.uuid4()),
+                init=False,
+            )
+        elif config.id_type == 'uuid':
+            field_info._default(
+                default=Undefined,
+                default_factory=uuid.uuid4,
+                init=False,
+            )
+
+    # Handle identity field manual strategy setup
+    elif config.id_strategy == 'manual':
+        field_info._default(default=Undefined)
+
+    # Handle identity field hybrid strategy setup
+    elif config.id_strategy == 'hybrid':
+        if config.id_type == 'string':
+            field_info._default(
+                default=Undefined,
+                default_factory=lambda: str(uuid.uuid4()),
+            )
+        elif config.id_type == 'uuid':
+            field_info._default(
+                default=Undefined,
+                default_factory=uuid.uuid4,
+            )
+
 
 def _extract_base_fields_namespace(
     namespace: dict[str, Any], /
@@ -1972,65 +2120,128 @@ def _extract_base_fields_namespace(
     return fields_namespace
 
 
-def _update_base_identity_and_type(cls: 'ResourceMeta', /) -> None:
-    """Initialize the base identity and type fields for the resource class."""
-    # Identity field setup
-    id = cls.resource_fields['id']
-    id_strategy = cls.resource_config.id_strategy
-    id_type = cls.resource_config.id_type
+def _extract_base_identity_definition(
+    namespace: dict[str, Any], /
+) -> FieldDefinition | None:
+    """Extract base identity definition from the resource class namespace."""
+    annotations: dict[str, Any] = namespace.get('__annotations__', {})
 
-    # Helper to handle identity field auto strategy setup
-    def handle_auto_strategy() -> None:
-        if id_type == 'integer':
-            return id._update(annotation=int, init=False)
-        if id_type == 'uuid':
-            return id._update(
-                annotation=UUID4,
-                default=Undefined,
-                default_factory=uuid.uuid4,
-                init=False,
+    if 'id' not in annotations and 'id' not in namespace:
+        return None
+    id_ann = annotations.pop('id', None)
+    id_value = namespace.pop('id', None)
+
+    # Validate identity annotation
+    if not isinstance(id_ann, type):
+        raise PlateformeError(
+            f"Invalid resource identity annotation. A valid type must be "
+            f"provided when shadowing the identity field. Got: {id_ann!r}.",
+            code='resource-invalid-config',
+        )
+    elif not issubclass(id_ann, (int, str, uuid.UUID)):
+        raise PlateformeError(
+            f"Invalid resource identity annotation. It must be a subclass of "
+            f"an integer, string, or UUID type. Got: {id_ann!r}.",
+            code='resource-invalid-config',
+        )
+
+    # Validate identity value
+    if id_value is not None and not isinstance(id_value, FieldInfo):
+        raise PlateformeError(
+            f"Invalid resource identity value. It must be a valid field "
+            f"informaton object. Got: {id_value!r}.",
+            code='resource-invalid-config',
+        )
+
+    return id_ann, id_value
+
+
+def _extract_base_type_definition(
+    namespace: dict[str, Any], /
+) -> str | None:
+    """Extract base type definition from the resource class namespace."""
+    annotations: dict[str, Any] = namespace.get('__annotations__', {})
+
+    if 'type_' not in annotations and 'type_' not in namespace:
+        return None
+    type_ann = annotations.pop('id', None)
+    type_value = namespace.pop('id', None)
+
+    # Validate type annotation
+    if type_ann is not None:
+        raise PlateformeError(
+            f"Invalid resource type annotation. An annotation cannot be "
+            f"provided when shadowing the type field. Got: {type_ann!r}.",
+            code='resource-invalid-config',
+        )
+
+    # Validate type value
+    if type_value is not None and not isinstance(type_value, str):
+        raise PlateformeError(
+            f"Invalid resource type value. It must be a valid string. "
+            f"Got: {type_value!r}.",
+            code='resource-invalid-config',
+        )
+
+    return type_value
+
+
+def _update_base_identity_definition(
+    cls: 'ResourceMeta', /, field_definition: FieldDefinition | None = None
+) -> None:
+    """Update the base identity field definition for the resource class."""
+    # Helper to check if identity field is configured
+    def is_configured(origin: Literal['self', 'sources']) -> bool:
+        if any(
+            cls.resource_config.check(
+                key, scope='set', origin=origin, raise_errors=False
             )
-        raise NotImplementedError(f"Unsupported identity type: {id_type!r}.")
-
-    # Helper to handle identity field manual strategy setup
-    def handle_manual_strategy() -> None:
-        if id_type == 'integer':
-            return id._update(annotation=int, default=Undefined)
-        if id_type == 'uuid':
-            return id._update(annotation=UUID4, default=Undefined)
-        raise NotImplementedError(f"Unsupported identity type: {id_type!r}.")
-
-    # Helper to handle identity field hybrid strategy setup
-    def handle_hybrid_strategy() -> None:
-        if id_type == 'integer':
-            return id._update(annotation=int)
-        if id_type == 'uuid':
-            return id._update(
-                annotation=UUID4,
-                default=Undefined,
-                default_factory=uuid.uuid4,
+            for key in ('id_type', 'id_strategy')
+        ):
+            if field_definition is None:
+                return True
+            raise PlateformeError(
+                f"Invalid resource identity configuration. A shadowing field "
+                f"definition cannot be provided when the identity field is "
+                f"already defined. Got: {field_definition!r}.",
+                code='resource-invalid-config',
             )
-        raise NotImplementedError(f"Unsupported identity type: {id_type!r}.")
+        return False
 
-    # Handle identity field setup
-    match id_strategy:
-        case 'auto':
-            handle_auto_strategy()
-        case 'manual':
-            handle_manual_strategy()
-        case 'hybrid':
-            handle_hybrid_strategy()
-        case _:
-            raise NotImplementedError(
-                f"Unsupported identity strategy: {id_strategy!r}."
-            )
+    # Skip if identity field is already defined within sources configuration
+    if is_configured('sources'):
+        return
+    # Skip if abstract and no field configuration or definition is provided
+    if is_abstract(cls) and field_definition is None \
+            and not is_configured('self'):
+        return
 
-    # Type field setup
-    type_ = cls.resource_fields['type_']
-    type_alias = cls.resource_config.alias
-    type_._update(
-        annotation=Literal[type_alias],  # type: ignore
-        default=type_alias,
+    # Apply identity configuration and shadowing
+    if field_definition is None:
+        _apply_base_identity_configuration(cls)
+    else:
+        _apply_base_identity_shadowing(cls, field_definition)
+
+    # Configure identity strategy
+    _configure_base_identity_strategy(cls)
+
+
+def _update_base_type_definition(
+    cls: 'ResourceMeta', /, field_definition: str | None
+) -> None:
+    """Update the base type field definition for the resource class."""
+    # Skip if abstract and no field definition is provided
+    if is_abstract(cls) and field_definition is None:
+        return
+
+    config = cls.resource_config
+    field_info = cls.resource_fields['type_']
+    field_definition = field_definition or config.alias
+
+    # Update type field information
+    field_info._update(
+        annotation=Literal[field_definition],  # type: ignore
+        default=field_definition,
     )
 
 
@@ -2116,7 +2327,7 @@ def _init_declarative_model(
     # Retrieve parent resource
     parent: type | None = None
     for base in bases:
-        if base in (Configurable, Representation):
+        if not is_resource(base):
             continue
         if is_abstract(base):
             continue
@@ -2708,9 +2919,11 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
         cls.__state__.flush()
 
     @property
-    def objects(cls) -> ResourceManager['BaseResource']:
+    def objects(  # type: ignore[misc]
+        cls: type[Resource]
+    ) -> ResourceManager[Resource]:
         """The resource manager that provides service methods on objects."""
-        return cls.__manager__
+        return cls.__manager__  # type: ignore
 
     def _add_services(
         cls,
@@ -2760,7 +2973,7 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
             methods = load_service(service)
             assert methods is not None
             for name, method in methods.items():
-                cls.objects._add_method(name, method)
+                cls.__manager__._add_method(name, method)
 
     def _get_service(cls, name: str) -> BaseService | None:
         """Get a service from the resource.
@@ -2816,9 +3029,9 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
                 s for s in cls.__config_services__ if s is not service
             )
             # Remove service wrapped methods from resource manager
-            methods = cls.objects._collect_methods(owner=service)
+            methods = cls.__manager__._collect_methods(owner=service)
             for name in methods:
-                cls.objects._remove_method(name)
+                cls.__manager__._remove_method(name)
 
     def _add_specs(
         cls,
@@ -2904,7 +3117,7 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
 
     def _collect_fields(
         cls, **kwargs: Unpack[FieldLookup]
-    ) -> dict[str, tuple[type[Any], ModelFieldInfo]]:
+    ) -> dict[str, tuple[type[Any], FieldInfo[Any]]]:
         """Collect the resource model field definitions.
 
         It collects the resource model field definitions based on the provided
@@ -2996,7 +3209,7 @@ class ResourceMeta(ABCMeta, ConfigurableMeta, DeclarativeMeta):
             return evaluate_config_field(
                 cls.resource_config,
                 name=name,
-                parents=[
+                sources=[
                     cls.resource_package.impl.settings,
                     cls.resource_package.impl.namespace.settings,
                     cls.resource_package.impl.context.settings
@@ -3485,7 +3698,7 @@ class BaseResource(
     __slots__ = ()
 
     # Base resource fields
-    id: int | UUID4 | None = Field(
+    id: Identity | None = Field(
         default=Deferred,
         validate_default=False,
         title='ID',
@@ -3501,24 +3714,25 @@ class BaseResource(
         title='Type',
         description='Resource polymorphic type',
         init=False,
+        repr=False,
         frozen=True,
     )
 
     if typing.TYPE_CHECKING:
         # Base resource specification
         class Model(BaseModel):
-            id: int | UUID4 | None
+            id: Identity | None
             type_: str
             ...
 
         # Base resource CRUD specification
         class Create(BaseModel):
-            id: int | UUID4 | None
+            id: Identity | None
             type_: str | None
             ...
 
         class Read(BaseModel):
-            id: int | UUID4 | None
+            id: Identity | None
             type_: str | None
             ...
 
@@ -3526,7 +3740,7 @@ class BaseResource(
             ...
 
         class Upsert(BaseModel):
-            id: int | UUID4 | None
+            id: Identity | None
             type_: str | None
             ...
 
@@ -3746,7 +3960,9 @@ class BaseResource(
                 model.__dict__[key] = value
 
     @classproperty
-    def resource_adapter(cls) -> TypeAdapterList['BaseResource']:
+    def resource_adapter(  # type: ignore
+        cls: type[Resource]
+    ) -> TypeAdapterList[Resource]:
         """Get the resource type adapter.
 
         Returns:
@@ -3759,7 +3975,7 @@ class BaseResource(
                 "the resource not being fully built or an error occurred "
                 "during resource construction."
             )
-        return cls.__pydantic_adapter__
+        return cls.__pydantic_adapter__  # type: ignore[return-value]
 
     @classproperty
     def resource_computed_fields(cls) -> dict[str, ComputedFieldInfo]:
@@ -3806,13 +4022,33 @@ class BaseResource(
         """
         return self.resource_model.model_fields_set
 
+    @typing.overload
     async def resource_add(
-        self,
+        self: Resource,
+        __session: AsyncSession | None = None,
         *,
-        session: AsyncSession | None = None,
+        save: Literal['commit', 'flush', True] | None = None,
+        merge: Literal[False] = False,
+    ) -> None:
+        ...
+
+    @typing.overload
+    async def resource_add(
+        self: Resource,
+        __session: AsyncSession | None = None,
+        *,
+        save: Literal['commit', 'flush', True] | None = None,
+        merge: Literal[True],
+    ) -> Resource:
+        ...
+
+    async def resource_add(
+        self: Resource,
+        __session: AsyncSession | None = None,
+        *,
         save: Literal['commit', 'flush', True] | None = None,
         merge: bool = False,
-    ) -> Self:
+    ) -> Resource | None:
         """Add the resource instance to the database.
 
         It places an object into the current `AsyncSession`.
@@ -3830,8 +4066,8 @@ class BaseResource(
         within this `AsyncSession`.
 
         Args:
-            session: The session to use for the operation. If not provided, the
-                session in the current context is used.
+            __session: The session to use for the operation. If not provided,
+                the session in the current context is used.
                 Defaults to ``None``.
             save: The mode to use for persisting the changes in the database.
                 If set to ``'commit'`` or ``True``, the transaction is
@@ -3842,14 +4078,21 @@ class BaseResource(
                 manually committed later. Defaults to ``None``.
             merge: Whether to merge the resource instance with the database
                 session. If set to ``True``, the resource instance is merged
-                with the session before adding it to the database.
+                with the session before adding it to the database. In this
+                case, the resource instance is returned after being merged.
                 Defaults to ``False``.
+
+        Returns:
+            The resource instance if `merge` is set to ``True``. Otherwise,
+            returns ``None``.
 
         Raises:
             PlateformeError: If the resource instance could not be added to the
                 database.
         """
-        async def execute(obj: Self, _session: AsyncSession) -> Self:
+        async def execute(
+            obj: Resource, _session: AsyncSession
+        ) -> Resource | None:
             if merge:
                 obj = await _session.merge(self)
             _session.add(obj)
@@ -3857,11 +4100,11 @@ class BaseResource(
                 await _session.commit(expire=False)
             elif save == 'flush':
                 await _session.flush()
-            return obj
+            return obj if merge else None
 
         try:
-            if session:
-                return await execute(self, session)
+            if __session:
+                return await execute(self, __session)
             async with async_session_manager(on_missing='raise') as session:
                 return await execute(self, session)
         except Exception as error:
@@ -3939,13 +4182,33 @@ class BaseResource(
         with validation_manager(mode='disabled'):
             return cls(model)
 
+    @typing.overload
     async def resource_delete(
-        self,
+        self: Resource,
+        __session: AsyncSession | None = None,
         *,
-        session: AsyncSession | None = None,
+        save: Literal['commit', 'flush', True] | None = None,
+        merge: Literal[False] = False,
+    ) -> None:
+        ...
+
+    @typing.overload
+    async def resource_delete(
+        self: Resource,
+        __session: AsyncSession | None = None,
+        *,
+        save: Literal['commit', 'flush', True] | None = None,
+        merge: Literal[True],
+    ) -> Resource:
+        ...
+
+    async def resource_delete(
+        self: Resource,
+        __session: AsyncSession | None = None,
+        *,
         save: Literal['commit', 'flush', True] | None = None,
         merge: bool = False,
-    ) -> Self:
+    ) -> Resource | None:
         """Delete the resource instance from the database.
 
         It marks an instance as deleted.
@@ -3962,8 +4225,8 @@ class BaseResource(
         no longer present within this `AsyncSession`.
 
         Args:
-            session: The session to use for the operation. If not provided, the
-                session in the current context is used.
+            __session: The session to use for the operation. If not provided,
+                the session in the current context is used.
                 Defaults to ``None``.
             save: The mode to use for persisting the changes in the database.
                 If set to ``'commit'`` or ``True``, the transaction is
@@ -3974,14 +4237,21 @@ class BaseResource(
                 should be manually committed later. Defaults to ``None``.
             merge: Whether to merge the resource instance with the database
                 session. If set to ``True``, the resource instance is merged
-                with the session before deleting it from the database.
+                with the session before deleting it from the database. In this
+                case, the resource instance is returned after being merged.
                 Defaults to ``False``.
+
+        Returns:
+            The resource instance if `merge` is set to ``True``. Otherwise,
+            returns ``None``.
 
         Raises:
             PlateformeError: If the resource instance could not be deleted from
                 the database.
         """
-        async def execute(obj: Self, _session: AsyncSession) -> Self:
+        async def execute(
+            obj: Resource, _session: AsyncSession
+        ) -> Resource | None:
             if merge:
                 obj = await _session.merge(obj)
             await _session.delete(obj)
@@ -3989,11 +4259,11 @@ class BaseResource(
                 await _session.commit(expire=False)
             elif save == 'flush':
                 await _session.flush()
-            return obj
+            return obj if merge else None
 
         try:
-            if session:
-                return await execute(self, session)
+            if __session:
+                return await execute(self, __session)
             async with async_session_manager(on_missing='raise') as session:
                 return await execute(self, session)
         except Exception as error:
@@ -4013,7 +4283,9 @@ class BaseResource(
         exclude_defaults: bool = False,
         exclude_none: bool = False,
         round_trip: bool = False,
-        warnings: bool = True,
+        warnings: bool | Literal['none', 'warn', 'error'] = True,
+        serialize_as_any: bool = False,
+        context: Any | None = None,
     ) -> dict[str, Any]:
         """Generate a dictionary representation of the resource.
 
@@ -4044,7 +4316,13 @@ class BaseResource(
             round_trip: If ``True``, dumped values should be valid as input for
                 non-idempotent types such as `Json[T]`. Defaults to ``False``.
             warnings: Whether to log warnings when invalid fields are
-                encountered. Defaults to ``True``.
+                encountered. ``False`` or ``'none'`` ignores them, ``True`` or
+                ``'warn'`` logs errors, ``'error'`` raises a Pydantic
+                serialization error. Defaults to ``True``.
+            serialize_as_any: Whether to serialize fields with duck-typing
+                serialization behavior. Defaults to ``False``.
+            context: Additional context to pass to the serializer.
+                Defaults to ``None``.
 
         Returns:
             A dictionary representation of the resource.
@@ -4059,6 +4337,8 @@ class BaseResource(
             exclude_none=exclude_none,
             round_trip=round_trip,
             warnings=warnings,
+            serialize_as_any=serialize_as_any,
+            context=context,
         )
 
     def resource_dump_json(
@@ -4072,7 +4352,9 @@ class BaseResource(
         exclude_defaults: bool = False,
         exclude_none: bool = False,
         round_trip: bool = False,
-        warnings: bool = True,
+        warnings: bool | Literal['none', 'warn', 'error'] = True,
+        serialize_as_any: bool = False,
+        context: Any | None = None,
     ) -> str:
         """Generate a JSON representation of the resource.
 
@@ -4098,7 +4380,13 @@ class BaseResource(
             round_trip: If ``True``, dumped values should be valid as input for
                 non-idempotent types such as `Json[T]`. Defaults to ``False``.
             warnings: Whether to log warnings when invalid fields are
-                encountered. Defaults to ``True``.
+                encountered. ``False`` or ``'none'`` ignores them, ``True`` or
+                ``'warn'`` logs errors, ``'error'`` raises a Pydantic
+                serialization error. Defaults to ``True``.
+            serialize_as_any: Whether to serialize fields with duck-typing
+                serialization behavior. Defaults to ``False``.
+            context: Additional context to pass to the serializer.
+                Defaults to ``None``.
 
         Returns:
             A JSON string representation of the resource.
@@ -4113,6 +4401,8 @@ class BaseResource(
             exclude_none=exclude_none,
             round_trip=round_trip,
             warnings=warnings,
+            serialize_as_any=serialize_as_any,
+            context=context,
         )
 
     @classmethod
@@ -4181,10 +4471,10 @@ class BaseResource(
 
     async def resource_merge(
         self: Resource,
+        __session: AsyncSession | None = None,
         *,
         load: bool = True,
         options: Sequence[ORMOption] | None = None,
-        session: AsyncSession | None = None,
     ) -> Resource:
         """Merge the resource instance with the database.
 
@@ -4206,9 +4496,11 @@ class BaseResource(
         mapped with ``cascade='merge'``.
 
         Args:
+            __session: The session to use for the operation. If not provided,
+                the session in the current context is used.
+                Defaults to ``None``.
             load: Whether to load the resource instance from the database if
                 not found in the session. Defaults to ``True``.
-
                 When ``False``, the method switches into a "high performance"
                 mode which causes it to forego emitting history events as well
                 as all database access. This flag is used for cases such as
@@ -4216,7 +4508,6 @@ class BaseResource(
                 second level cache, or to transfer just-loaded objects into the
                 `AsyncSession` owned by a worker thread or process without
                 re-querying the database.
-
                 The ``load=False`` use case adds the caveat that the given
                 object has to be in a "clean" state, that is, has no pending
                 changes to be flushed - even if the incoming object is detached
@@ -4233,16 +4524,13 @@ class BaseResource(
             options: Optional sequence of loader options which will be applied
                 to the `session.get` method when the merge operation loads the
                 existing version of the object from the database.
-            session: The session to use for the operation. If not provided, the
-                session in the current context is used.
-                Defaults to ``None``.
 
         Returns:
             The merged resource instance.
         """
         try:
-            if session:
-                return await session.merge(self, load=load, options=options)
+            if __session:
+                return await __session.merge(self, load=load, options=options)
             async with async_session_manager(on_missing='raise') as session:
                 return await session.merge(self, load=load, options=options)
         except Exception as error:

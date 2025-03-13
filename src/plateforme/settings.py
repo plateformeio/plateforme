@@ -15,17 +15,39 @@ objects that enhance maintainability and scalability of the application.
 from .core.settings import (
     APIRouterSettings,
     APISettings,
+    ContactInfo,
+    LicenseInfo,
+    LoggingCustomFormatterSettings,
+    LoggingCustomHandlerSettings,
+    LoggingDefaultFormatterSettings,
+    LoggingFileHandlerSettings,
+    LoggingJsonFormatterSettings,
     LoggingSettings,
+    LoggingSimpleFormatterSettings,
+    LoggingStreamHandlerSettings,
     NamespaceSettings,
     PackageSettings,
+    PackageSettingsExtra,
     Settings,
 )
 
 __all__ = (
+    # Information
+    'ContactInfo',
+    'LicenseInfo',
+    # Settings
     'APIRouterSettings',
     'APISettings',
+    'LoggingCustomFormatterSettings',
+    'LoggingCustomHandlerSettings',
+    'LoggingDefaultFormatterSettings',
+    'LoggingFileHandlerSettings',
+    'LoggingJsonFormatterSettings',
     'LoggingSettings',
+    'LoggingSimpleFormatterSettings',
+    'LoggingStreamHandlerSettings',
     'NamespaceSettings',
     'PackageSettings',
+    'PackageSettingsExtra',
     'Settings',
 )

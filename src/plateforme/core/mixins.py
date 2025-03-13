@@ -17,25 +17,47 @@ __all__ = (
 
 from datetime import datetime, timezone
 
-from .resources import BaseResource
 from .schema.fields import Field
 
 
 class Archivable:
     """Archivable mixin for resource class.
 
-    FUTURE: Implement archivable mixin for resource class.
+    FIXME: Implement archivable mixin for resource class.
     """
-    pass
+
+    is_deleted: bool = Field(
+        default=False,
+        title="Is deleted",
+        description="Flag indicating whether the resource is deleted.",
+        init=False,
+        repr=False,
+    )
+
+    deleted_at: datetime | None = Field(
+        default=None,
+        title="Deleted at",
+        description="Date and time the resource was deleted.",
+        examples=["2023-01-01T00:00:00Z"],
+        init=False,
+        repr=False,
+    )
+
+    deleted_by: str | None = Field(
+        default=None,
+        title="Deleted by",
+        description="User who deleted the resource.",
+        examples=['admin', '123456'],
+        init=False,
+        repr=False,
+    )
 
 
-class Auditable(BaseResource):
+class Auditable:
     """Auditable mixin for resource class.
 
     FIXME: Implement auditable mixin for resource class.
     """
-
-    __abstract__ = True
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -45,6 +67,7 @@ class Auditable(BaseResource):
         init=False,
         frozen=True,
     )
+
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Updated at",
@@ -52,6 +75,7 @@ class Auditable(BaseResource):
         examples=["2023-01-01T00:00:00Z"],
         init=False,
     )
+
     created_by: str | None = Field(
         default=None,
         title="Created by",
@@ -60,6 +84,7 @@ class Auditable(BaseResource):
         init=False,
         frozen=True,
     )
+
     updated_by: str | None = Field(
         default=None,
         title="Updated by",

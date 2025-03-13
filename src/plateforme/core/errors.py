@@ -16,25 +16,25 @@ from typing import Any, Literal, Self
 from ..framework import URL
 
 __all__ = (
-    # Plateforme
     'ERROR_CODES',
     'BaseError',
-    'PlateformeError',
-    # Database
+    # Framework
+    'AuthenticationError',
     'DatabaseError',
-    'SessionError',
+    'SecurityError',
+    # User
+    'PlateformeError',
+    # Miscellaneous
     'MissingDeferred',
 )
 
 
-# MARK: Plateforme
-
 ERROR_CODES = Literal[
-    # Framework errors
+    # Framework error codes
+    'authentication-error',
     'database-error',
-    'session-error',
-    'missing-deferred',
-    # User errors
+    'security-error',
+    # User error codes
     'association-invalid-config',
     'attribute-invalid-config',
     'authentication-failed',
@@ -80,15 +80,23 @@ ERROR_CODES = Literal[
     'spec-already-applied',
     'spec-not-applied',
     'spec-applied-to-base',
+    # Miscellaneous error codes
+    'missing-deferred',
 ]
 """An enumeration of all Plateforme error codes typically used to identify
 documentation url for specific errors."""
 
 
+# MARK: Base Error
+
 class BaseError(Exception):
     """Raised when an error occurs within the framework."""
 
+    kind: str
+    """The kind of error that occurred."""
+
     code: str | None
+    """The error code associated with the error."""
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
         if cls is BaseError:
@@ -110,18 +118,52 @@ class BaseError(Exception):
         else:
             return str(self.args)
 
+    def url(self) -> str:
+        """Return the URL for the error."""
+        url = f'{URL.ERRORS}/{self.kind}'
+        if self.code is not None:
+            url += f'#{self.code}'
+        return url
+
     def __str__(self) -> str:
         """Return a string representation of the error."""
         message = self.message()
         if self.code is None:
             return message
         message += "\n\n"
-        message += f"For further information visit {URL.ERRORS}{self.code}"
+        message += f"For further information visit {self.url()}"
         return message
 
 
+# MARK: Framework Errors
+
+class AuthenticationError(BaseError):
+    """Raised when an error occurs with authentication."""
+
+    kind = 'framework'
+    code = 'authentication-error'
+
+
+class DatabaseError(BaseError):
+    """Raised when an error occurs with the database."""
+
+    kind = 'framework'
+    code = 'database-error'
+
+
+class SecurityError(BaseError):
+    """Raised when a security error occurs within the framework."""
+
+    kind = 'framework'
+    code = 'security-error'
+
+
+# MARK: User Errors
+
 class PlateformeError(BaseError):
     """Raised when a user error occurs within the framework."""
+
+    kind = 'user'
 
     def __init__(
         self,
@@ -133,21 +175,10 @@ class PlateformeError(BaseError):
         super().__init__(*args)
 
 
-# MARK: Database
-
-class DatabaseError(BaseError):
-    """Raised when an error occurs with the database."""
-
-    code = 'database-error'
-
-
-class SessionError(BaseError):
-    """Raised when an error occurs with a database session."""
-
-    code = 'session-error'
-
+# MARK: Miscellaneous Errors
 
 class MissingDeferred(BaseError):
     """Raised when a deferred attribute is accessed before it is loaded."""
 
+    kind = 'framework'
     code = 'missing-deferred'

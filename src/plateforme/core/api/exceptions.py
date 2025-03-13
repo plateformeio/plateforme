@@ -10,14 +10,13 @@ This module provides utilities for managing exceptions within the Plateforme
 framework's API using FastAPI and Starlette features.
 """
 
-from typing import Callable
-
 from fastapi.exceptions import HTTPException, WebSocketException
 
 from .. import errors
 from .requests import Request
-from .responses import JSONResponse, Response
+from .responses import JSONResponse
 from .status import status
+from .types import ExceptionHandler
 
 __all__ = (
     'HTTPException',
@@ -36,27 +35,15 @@ def database_exception_handler(
     """Handle database exceptions."""
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={'message': "An error occurred while handling the database."},
-    )
-
-
-def session_exception_handler(
-    request: Request, exc: Exception
-) -> JSONResponse:
-    """Handle database session exceptions."""
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={'message': "An error occurred while handling the session."},
+        content={
+            'message': "An error occurred within a database operation."
+        },
     )
 
 
 # MARK: Exception Handlers Mapping
 
-EXCEPTION_HANDLERS: dict[
-    type[Exception],
-    Callable[[Request, Exception], Response],
-] = {
+EXCEPTION_HANDLERS: dict[type[Exception], ExceptionHandler] = {
     errors.DatabaseError: database_exception_handler,
-    errors.SessionError: session_exception_handler,
 }
 """A dictionary of exception handlers for the Plateforme application."""

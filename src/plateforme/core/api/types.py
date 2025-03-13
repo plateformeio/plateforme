@@ -10,10 +10,19 @@ This module provides type hints for the Plateforme framework's API using
 FastAPI and Starlette features.
 """
 
-from starlette.types import ASGIApp, Lifespan, Message, Receive, Scope, Send
+from starlette.types import (
+    ASGIApp,
+    ExceptionHandler,
+    Lifespan,
+    Message,
+    Receive,
+    Scope,
+    Send,
+)
 
 __all__ = (
     'ASGIApp',
+    'ExceptionHandler',
     'Lifespan',
     'Message',
     'Receive',

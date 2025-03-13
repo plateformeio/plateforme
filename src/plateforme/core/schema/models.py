@@ -863,7 +863,7 @@ class BaseModel(_BaseModel, Configurable[ModelConfig], metaclass=ModelMeta):
         # The non-existent keyword argument "init=False" is used below so that
         # "@dataclass_transform" doesn't pass these attributes as valid
         # keyword arguments to the class initializer.
-        __pydantic_validated__: bool = PrivateAttr(default=False)
+        __pydantic_validated__: bool = PrivateAttr(default=False, init=False)
 
     # Set model attributes
     __config__ = ModelConfig()
@@ -1013,7 +1013,9 @@ class BaseModel(_BaseModel, Configurable[ModelConfig], metaclass=ModelMeta):
         exclude_defaults: bool = False,
         exclude_none: bool = False,
         round_trip: bool = False,
-        warnings: bool = True,
+        warnings: bool | Literal['none', 'warn', 'error'] = True,
+        serialize_as_any: bool = False,
+        context: Any | None = None,
     ) -> dict[str, Any]:
         """Generate a dictionary representation of the model.
 
@@ -1043,7 +1045,13 @@ class BaseModel(_BaseModel, Configurable[ModelConfig], metaclass=ModelMeta):
             round_trip: If ``True``, dumped values should be valid as input for
                 non-idempotent types such as `Json[T]`. Defaults to ``False``.
             warnings: Whether to log warnings when invalid fields are
-                encountered. Defaults to ``True``.
+                encountered. ``False`` or ``'none'`` ignores them, ``True`` or
+                ``'warn'`` logs errors, ``'error'`` raises a Pydantic
+                serialization error. Defaults to ``True``.
+            serialize_as_any: Whether to serialize fields with duck-typing
+                serialization behavior. Defaults to ``False``.
+            context: Additional context to pass to the serializer.
+                Defaults to ``None``.
 
         Returns:
             A dictionary representation of the model.
@@ -1060,6 +1068,8 @@ class BaseModel(_BaseModel, Configurable[ModelConfig], metaclass=ModelMeta):
                 exclude_none=exclude_none,
                 round_trip=round_trip,
                 warnings=warnings,
+                serialize_as_any=serialize_as_any,
+                context=context,
             )
 
         # Handle raw mode
@@ -2026,7 +2036,9 @@ class RootModel(BaseModel, Generic[_TRoot], metaclass=RootModelMeta):
             exclude_defaults: bool = False,
             exclude_none: bool = False,
             round_trip: bool = False,
-            warnings: bool = True,
+            warnings: bool | Literal['none', 'warn', 'error'] = True,
+            serialize_as_any: bool = False,
+            context: Any | None = None,
         ) -> Any:
             """This method is included just to get a more accurate return type
             for type checkers. It is included in this `if TYPE_CHECKING:` block
@@ -2770,7 +2782,7 @@ def collect_class_fields(
         elif field_include is not None or field_exclude is not None:
             # Validate include configuration
             if field_include is not None:
-                if not isinstance(field_include, (list, set, tuple)):
+                if not isinstance(field_include, (list, tuple, set)):
                     raise TypeError(
                         f"Field include filter must be a collection of field "
                         f"names. Got: {field_include}."
@@ -2780,7 +2792,7 @@ def collect_class_fields(
                 field_include = {'name': set(field_include)}
             # Validate exclude configuration
             if field_exclude is not None:
-                if not isinstance(field_exclude, (list, set, tuple)):
+                if not isinstance(field_exclude, (list, tuple, set)):
                     raise TypeError(
                         f"Field exclude filter must be a collection of field "
                         f"names. Got: {field_exclude}."
@@ -2926,7 +2938,7 @@ def collect_model_fields(
             return bool(check_value(attr_value))
         return bool(
             attr_value in check_value
-            if isinstance(check_value, (list, set, tuple))
+            if isinstance(check_value, (list, tuple, set))
             else attr_value == check_value
         )
 
@@ -2945,8 +2957,15 @@ def collect_model_fields(
         for field_name in field_names:
             model_field = model_fields[field_name]
 
+            # Skip protected target fields
+            if isinstance(model_field, FieldInfo) \
+                    and isinstance(model_field.target, type) \
+                    and model_field.target.resource_config.protected:
+                continue
+
             # Skip computed fields if not requested
-            if isinstance(model_field, ComputedFieldInfo) and not computed:
+            if isinstance(model_field, ComputedFieldInfo) \
+                    and not computed:
                 continue
 
             # Skip fields if not matching include or exclude filters
@@ -2971,9 +2990,12 @@ def collect_model_fields(
             if update:
                 field._update(**update)
             if partial is True:
+                if field.metadata:
+                    annotation = \
+                        Annotated[annotation, *field.metadata]  # type: ignore
+                    field.metadata = []
                 annotation = Optional[annotation]  # type: ignore
-                if field.default is Undefined \
-                        and field.default_factory is None:
+                if field.is_required():
                     field._update(default=None)
 
             field_definitions[field_name] = (annotation, field)

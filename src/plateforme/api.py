@@ -12,19 +12,35 @@ design, asynchronous handling, and additional features like background tasks,
 data structures management, and custom request and response handling.
 """
 
+from .core.api.authentication import (
+    AuthClaim,
+    AuthCredentials,
+    AuthUser,
+    BaseUser,
+    GuestUser,
+    requires,
+)
 from .core.api.background import BackgroundTasks
 from .core.api.base import APIManager
 from .core.api.datastructures import (
+    JWT,
     URL,
     Address,
     FormData,
     Headers,
+    MutableHeaders,
     QueryParams,
     State,
     UploadFile,
+    URLPath,
 )
 from .core.api.dependencies import AsyncSessionDep, SessionDep
 from .core.api.exceptions import HTTPException, WebSocketException
+from .core.api.middleware import (
+    BaseHTTPMiddleware,
+    Middleware,
+    RequestResponseEndpoint,
+)
 from .core.api.parameters import (
     Body,
     Cookie,
@@ -62,18 +78,28 @@ from .core.expressions import Condition, Filter, Ordering, Sort
 from .core.selectors import BaseSelector, Id, Key, KeyList
 
 __all__ = (
+    # Authentication
+    'AuthClaim',
+    'BaseUser',
+    'AuthCredentials',
+    'AuthUser',
+    'GuestUser',
+    'requires',
     # Background
     'BackgroundTasks',
     # Base
     'APIManager',
     # Datastructures
-    'URL',
     'Address',
     'FormData',
     'Headers',
+    'JWT',
+    'MutableHeaders',
     'QueryParams',
     'State',
     'UploadFile',
+    'URL',
+    'URLPath',
     # Dependencies
     'AsyncSessionDep',
     'SessionDep',
@@ -85,6 +111,10 @@ __all__ = (
     'Filter',
     'Ordering',
     'Sort',
+    # Middleware
+    'BaseHTTPMiddleware',
+    'Middleware',
+    'RequestResponseEndpoint',
     # Parameters
     'Body',
     'Cookie',

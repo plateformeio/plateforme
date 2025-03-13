@@ -126,8 +126,9 @@ if typing.TYPE_CHECKING:
     )
     from .core.environment import Environment
     from .core.expressions import Condition, Filter, Ordering, Sort
-    from .core.main import Plateforme
+    from .core.main import Plateforme, get_current_app
     from .core.mixins import Archivable, Auditable, Encrypted
+    from .core.packages import get_current_package, get_current_package_extra
     from .core.resources import (
         BaseResource,
         CRUDResource,
@@ -282,7 +283,7 @@ if typing.TYPE_CHECKING:
         StrictInteger,
     )
     from .core.types.paths import AnyPath, DirectoryPath, FilePath, NewPath
-    from .core.types.secrets import Secret, SecretBytes, SecretStr
+    from .core.types.secrets import Secret, SecretBytes, SecretInt, SecretStr
     from .core.types.strings import StrictString, String
     from .core.types.uuid import UUID, UUID1, UUID3, UUID4, UUID5
 
@@ -401,10 +402,14 @@ __all__ = (
     'Sort',
     # Core (main)
     'Plateforme',
+    'get_current_app',
     # Core (mixins)
     'Archivable',
     'Auditable',
     'Encrypted',
+    # Core (packages)
+    'get_current_package',
+    'get_current_package_extra',
     # Core (resources)
     'BaseResource',
     'CRUDResource',
@@ -572,6 +577,7 @@ __all__ = (
     # Types (secrets)
     'Secret',
     'SecretBytes',
+    'SecretInt',
     'SecretStr',
     # Types (strings)
     'StrictString',
@@ -697,10 +703,14 @@ __all_dynamic__: dict[str, tuple[str | None, str]] = {
     'Sort': (None, '.core.expressions'),
     # Core (main)
     'Plateforme': (None, '.core.main'),
+    'get_current_app': (None, '.core.main'),
     # Core (mixins)
     'Archivable': (None, '.core.mixins'),
     'Auditable': (None, '.core.mixins'),
     'Encrypted': (None, '.core.mixins'),
+    # Core (packages)
+    'get_current_package': (None, '.core.packages'),
+    'get_current_package_extra': (None, '.core.packages'),
     # Core (resources)
     'BaseResource': (None, '.core.resources'),
     'CRUDResource': (None, '.core.resources'),
@@ -868,6 +878,7 @@ __all_dynamic__: dict[str, tuple[str | None, str]] = {
     # Types (secrets)
     'Secret': (None, '.core.types.secrets'),
     'SecretBytes': (None, '.core.types.secrets'),
+    'SecretInt': (None, '.core.types.secrets'),
     'SecretStr': (None, '.core.types.secrets'),
     # Types (strings)
     'StrictString': (None, '.core.types.strings'),

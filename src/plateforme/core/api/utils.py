@@ -12,19 +12,25 @@ framework using FastAPI and Starlette features.
 
 import re
 import typing
-from typing import Protocol
+from functools import wraps
+from typing import Any, Callable, Protocol, TypeVar
 
+from ..context import SESSION_BULK_CONTEXT
 from ..patterns import RegexPattern, to_path_case, to_snake_case
+from ..typing import is_async
 
 if typing.TYPE_CHECKING:
     from ..packages import Package
     from ..resources import ResourceType
     from .routing import APIBaseRoute, BaseRoute
 
+_T = TypeVar('_T', bound=Callable[..., Any])
+
 __all__ = (
     'APIBaseRouteIdentifier',
     'generate_unique_id',
     'parse_unique_id',
+    'resolve_bulk_references',
     'sort_key_for_routes',
 )
 
@@ -148,6 +154,27 @@ def parse_unique_id(id: str) -> tuple[
         )
 
     return package, path, name, tuple(methods.split('|'))
+
+
+def resolve_bulk_references(func: _T, /) -> _T:
+    """Decorator for resolving bulk operations on resources."""
+
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        # Resolve resource references within the bulk context
+        if bulk := SESSION_BULK_CONTEXT.get():
+            resolver = bulk.resolve(
+                raise_errors=True,
+                scope='references',
+                strategy='hydrate',
+            )
+
+            if is_async(bulk.resolve):
+                await resolver
+
+        return await func(*args, **kwargs)
+
+    return wrapper  # type: ignore
 
 
 def sort_key_for_routes(route: 'BaseRoute') -> tuple[bool, str]:

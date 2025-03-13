@@ -79,7 +79,7 @@ class PayloadInfo(BodyInfo):
         on_conflict: Literal['lax', 'omit', 'raise'] = 'raise',
         **kwargs: Unpack[BaseFieldInfoDict],
     ):
-        super().__init__(..., **kwargs)  # type: ignore
+        super().__init__(..., **kwargs)
         self.apply_selection = apply_selection
         self.on_conflict = on_conflict
 
@@ -128,7 +128,7 @@ class SelectionInfo(BodyInfo):
     """A resource selection information for an endpoint parameter."""
 
     def __init__(self,  **kwargs: Unpack[BaseFieldInfoDict]):
-        super().__init__(default=Key(), **kwargs)  # type: ignore
+        super().__init__(default=Key(), **kwargs)
 
 
 def Selection(**kwargs: Unpack[BaseFieldInfoDict]) -> Any:
