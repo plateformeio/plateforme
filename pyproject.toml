@@ -60,7 +60,7 @@ dependencies = [
     "alembic==1.14.1",
     "fastapi==0.115.8",
     "pydantic==2.10.6",
-    "pydantic-core==2.27.2",
+    "pydantic-core==2.33.0",
     "pydantic-settings==2.8.0",
     "python-dotenv==1.0.1",
     "sqlalchemy==2.0.38",
